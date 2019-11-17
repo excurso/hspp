@@ -19,8 +19,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef HASHTABLE_H
 #define HASHTABLE_H
-#include <unordered_map>
 #include <functional>
+#include <unordered_map>
 using namespace std;
 
 /// Container which is derived from unordered_map
