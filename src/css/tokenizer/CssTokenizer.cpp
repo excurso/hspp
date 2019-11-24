@@ -30,6 +30,39 @@ const GeneralTokenStreamPtr
 CssTokenizer::
 tokenize()
 {
+    // Recognize character encoding
+    // If no @charset rule is available, UTF-8 encoding is used
+    if (byteStream()->substr(0, 8) == "@charset") {
+        setIterator(byteStream()->begin() + 8);
+        skipSpace();
+
+        string encoding;
+
+        if (GeneralTokenizer::isString(encoding)) {
+            encoding = string(encoding.begin()+1, encoding.end()-1);
+
+            if (String::toLower(encoding) == "utf-8")
+                setEncoding(UTF8);
+            else if (String::toLower(encoding.substr(0, 8)) == "iso-8859")
+                setEncoding(ISO8859);
+            else if (String::toLower(encoding.substr(0, 11)) == "windows-125" &&
+                     encoding.length() == 12 && encoding.back() >= '0' && encoding.back() <= '8')
+                setEncoding(WINDOWS125X);
+            else {
+                setEncoding(UNSUPPORTED);
+
+                cout << "[Note] Character encoding '" << encoding << "' is not supported." NEWLINE
+                     << "       This can lead to unexpected results." NEWLINE
+                     << endl;
+            }
+        }
+
+        if (currentChar(';'))
+            setIterator(byteStream()->begin());
+        else
+            throwSyntaxError();
+    }
+
     while (!isEof()) {
         if (isWhiteSpace()) continue;
         if (isComment()) continue;

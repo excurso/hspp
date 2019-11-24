@@ -50,22 +50,34 @@ public:
     GeneralTokenizer &operator=(const GeneralTokenizer &&) = delete;
 
 protected:
+    enum Encoding : uint8_t { UNSUPPORTED, UTF8, ISO8859, WINDOWS125X };
+
+    inline void
+    setEncoding(Encoding encoding);
+
+    inline Encoding
+    encoding();
+
     inline bool
     isOneOfChars(const string &allowed) const,
-    isSpaceChar() const noexcept;
+    isSpaceChar() const noexcept,
+
+    encoding                (const initializer_list<Encoding> candidates) const;
 
     void
     skipSpace() const noexcept;
 
     inline bool
     isLineTerminator() const,
-    isTab() const;
+    isTab() const,
+    isUtf8MultibyteChar() const;
 
     bool
+    advance(int64_t count = 1) const,
+
     isComment               (const string &comment_start_identifier,
                              const string &comment_end_identifier,
                              string &comment) const,
-
     isString                (string &str) const,
     isTerm                  (string *str = nullptr) const,
 
@@ -94,7 +106,6 @@ protected:
     getIterator(int64_t count = 0) const;
 
     inline bool
-    advance(int64_t count = 1) const,
     currentChar(const char c) const,
     currentChar(const initializer_list<char> chars) const,
     nextChar(const char c) const,
@@ -121,7 +132,34 @@ private:
 
     mutable uint64_t			m_row, m_column;
     mutable string::iterator	m_iterator, m_row_begin;
+
+    Encoding m_encoding { UTF8 };
 };
+
+inline void
+GeneralTokenizer::
+setEncoding(Encoding encoding)
+{
+    m_encoding = encoding;
+}
+
+inline auto
+GeneralTokenizer::
+encoding() -> Encoding
+{
+    return m_encoding;
+}
+
+inline bool
+GeneralTokenizer::
+encoding(const initializer_list<Encoding> candidates) const
+{
+    for (const auto &candidate : candidates)
+        if (candidate == m_encoding)
+            return true;
+
+    return false;
+}
 
 inline void
 GeneralTokenizer::
@@ -143,54 +181,43 @@ appendToken(const GeneralTokenPtr &token, const uint64_t row, const uint64_t col
 
 inline bool
 GeneralTokenizer::
-advance(int64_t count) const
+isUtf8MultibyteChar() const
 {
-    const auto isUtf8MultibyteChar = [&]() -> bool {
-        uint8_t char_count = 0;
+    uint8_t char_count = 0;
 
-        if ((currentChar() & 0x80) == 0x80) {
-            // 4 byte char
-            if ((currentChar() & 0xf0) == 0xf0) {
-                char_count = 4;
-            }
-            // 3 byte char
-            else if ((currentChar() & 0xe0) == 0xe0 && (currentChar() & 0x10) != 0x10) {
-                char_count = 3;
-            }
-            // 2 byte char
-            else if ((currentChar() & 0xc0) == 0xc0 && (currentChar() & 0x20) != 0x20) {
-                char_count = 2;
-            }
+    if ((currentChar() & 0x80) == 0x80) {
+        // 4 byte char
+        if ((currentChar() & 0xf0) == 0xf0) {
+            char_count = 4;
         }
-
-        if (bool(char_count)) {
-            const auto end = getIterator()+char_count;
-            while (!isEof() && getIterator() != end) ++m_iterator;
-            ++m_column;
-            return true;
+        // 3 byte char
+        else if ((currentChar() & 0xe0) == 0xe0 && (currentChar() & 0x10) != 0x10) {
+            char_count = 3;
         }
-
-        return false;
-    };
-
-    if ((count < 0 && getIterator(+count) < byteStream()->begin()) || getIterator(+count) > byteStream()->end()) return false;
-
-    if (count > 0) {
-        auto end = getIterator(+count);
-
-        while (getIterator() < end) {
-            if (isUtf8MultibyteChar())
-                continue;
-
-            if (!isEof() && (isTab() || isLineTerminator() || bool(++m_column)))
-                ++m_iterator;
+        // 2 byte char
+        else if ((currentChar() & 0xc0) == 0xc0 && (currentChar() & 0x20) != 0x20) {
+            char_count = 2;
         }
-    } else if (count < 0) {
-        if (getIterator()+count > byteStream()->begin()) m_iterator+=count;
-        else return false;
     }
 
-    return true;
+    if (bool(char_count)) {
+        const auto begin = getIterator();
+        const auto end = begin + char_count;
+
+        while (!isEof() && getIterator() != end) {
+            if (currentChar() < 0)
+                ++m_iterator;
+            else {
+                m_iterator = begin;
+                return false;
+            }
+        }
+
+        ++m_column;
+        return true;
+    }
+
+    return false;
 }
 
 inline char

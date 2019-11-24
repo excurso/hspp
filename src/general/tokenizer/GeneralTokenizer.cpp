@@ -122,7 +122,7 @@ isString(string &str) const
     if (currentChar({'"', '\''})) {
         const auto begin = getIterator();
 
-        while (advance() && !isEof() && !currentChar(*begin));
+        do advance(); while (!isEof() && !currentChar(*begin));
 
         if (currentChar(*begin) && advance()) {
             str = string(begin, getIterator());
@@ -159,6 +159,30 @@ readCharSequence(const string &not_allowed_chars) const
     }
 
     return String(char_sequence);
+}
+
+bool
+GeneralTokenizer::
+advance(int64_t count) const
+{
+    if ((count < 0 && getIterator(+count) < byteStream()->begin()) || getIterator(+count) > byteStream()->end()) return false;
+
+    if (count > 0) {
+        auto end = getIterator(+count);
+
+        while (getIterator() < end) {
+            if (m_encoding == UTF8 && isUtf8MultibyteChar())
+                continue;
+
+            if (!isEof() && (isTab() || isLineTerminator() || bool(++m_column)))
+                ++m_iterator;
+        }
+    } else if (count < 0) {
+        if (getIterator()+count > byteStream()->begin()) m_iterator+=count;
+        else return false;
+    }
+
+    return true;
 }
 
 void
