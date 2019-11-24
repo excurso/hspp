@@ -29,8 +29,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #define SPACE_CHARS " \n\t\r\f\v"
 
-//static constexpr array<char, 7> SPACE_CHARS = {" \n\t\r\f\v"};
-
 class String : public string
 {
 public:
