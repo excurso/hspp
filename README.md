@@ -13,11 +13,19 @@ HSPP is an optimizer and minifier for CSS files written in C++11.
  * Removing comments (preserving comments containing specific terms is possible)
  * Number minification
  * Color minification
+ * Minification of angles
  * Minification of IDs
  * Minification of class names
  * Minification of custom property names
  * Minification of keyframes animation names
+ * Rewriting/minifying of some functions
  * Removing of empty rules
+
+## A short description on how HSPP operates
+1. Tokenize the input CSS file to a token stream
+2. Parse the token stream into an abstract syntax tree (AST)
+3. Modify the AST
+4. Output the modified AST information to a file or standard output
 
 ## Prebuilt binaries
 Visit the [download page](https://utilizer.de/hspp/?nav=3) to download
