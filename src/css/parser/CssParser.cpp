@@ -1450,7 +1450,7 @@ void
 CssParser::
 throwParseError(const string &message) const
 {
-    cout << "[CSS PARSER]" NEWLINE;
+    cout << NEWLINE "[CSS PARSER]" NEWLINE;
 
     if (!currentToken()->isEof()) {
         cout << "Parse error: Unexpected token '";
