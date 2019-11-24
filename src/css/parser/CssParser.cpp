@@ -505,6 +505,22 @@ parsePseudoClass()
 
                 throwParseError("");
             }
+        } else {
+            if (nextToken()->isPunctuator('(') && advance() && lookAhead()) {
+                do {
+                    if (parseSelectorCombination()) {
+                        pseudo_class->appendSubSelector(CssSelector::fromBase(m_tmp_result_stack.top()));
+                        m_tmp_result_stack.pop();
+                    } else throwParseError("");
+                } while (currentToken()->isPunctuator(',') && lookAhead());
+
+                if (currentToken()->isPunctuator(')') && advance()) {
+                    m_tmp_result_stack.emplace(pseudo_class);
+                    return true;
+                }
+
+                throwParseError("");
+            }
         }
 
         m_tmp_result_stack.emplace(pseudo_class);
