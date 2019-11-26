@@ -5,6 +5,7 @@ HSPP is an optimizer and minifier for CSS files written in C++11.
  * To save your servers bandwidth
  * To speed up network transfer (in most cases it will also lead to better gzip results)
  * To speed up parsing by the browser
+ * To improve search engine rating
  * To make your production code harder to read for the others (obfuscation).\
    At the same time your original code will stay unchanged.
 
