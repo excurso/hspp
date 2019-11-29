@@ -47,7 +47,7 @@ inline void writeConfigFile()
         "##############################################\n\n"
 
         "# For setting descriptions look:\n"
-        "# https://www.utilizer.de/hspp/?nav=1#config-file\n\n"
+        "# https://utilizer.de/hspp/documentation#config-file\n\n"
 
         "[general]\n"
         "input_working_directory        = \n"
