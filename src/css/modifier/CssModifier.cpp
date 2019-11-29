@@ -647,8 +647,8 @@ visit(const CssSelectorPtr &selector)
     if (selector->parentalSelector())
         selector->parentalSelector()->accept(*this);
 
-    if (!selector->subSelectors().empty())
-        for (const auto &selector : selector->subSelectors())
+    if (selector->subSelectors() && !selector->subSelectors()->empty())
+        for (const auto &selector : *selector->subSelectors())
             selector->accept(*this);
 }
 

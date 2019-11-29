@@ -47,7 +47,7 @@ public:
     accept(CssVisitorInterface &visitor) override,
 
     setSelectorType(const SelectorType selector_type),
-    setSubselectorList(const DataContainer<CssSelectorPtr> &subselector_list),
+    setSubselectorList(const shared_ptr<DataContainer<CssSelectorPtr> > &subselector_list),
     setName(const string &name),
     setName(string *name),
     setName(const shared_ptr<string> &name),
@@ -73,7 +73,7 @@ public:
     &parentalSelector() const,
     &childSelector() const;
 
-    inline const DataContainer<CssSelectorPtr> &
+    inline const shared_ptr<DataContainer<CssSelectorPtr> > &
     subSelectors() const;
 
 protected:
@@ -87,7 +87,7 @@ protected:
     m_child_selector;
 
     // Used in pseudo-class selectors
-    DataContainer<CssSelectorPtr> m_sub_selectors;
+    shared_ptr<DataContainer<CssSelectorPtr> > m_sub_selectors;
 };
 
 using CssSelectorPtr = shared_ptr<CssSelector>;
@@ -206,18 +206,21 @@ inline void
 CssSelector::
 appendSubSelector(const CssSelectorPtr &sub_selector)
 {
-    m_sub_selectors.emplace_back(sub_selector);
+    if (!m_sub_selectors) m_sub_selectors = make_shared<DataContainer<CssSelectorPtr> >();
+
+    m_sub_selectors->emplace_back(sub_selector);
 }
 
 inline void
 CssSelector::
-setSubselectorList(const DataContainer<CssSelectorPtr> &subselector_list)
+setSubselectorList(const shared_ptr<DataContainer<CssSelectorPtr> > &subselector_list)
 {
-    m_sub_selectors.reserve(subselector_list.size());
+    if (!m_sub_selectors) m_sub_selectors = make_shared<DataContainer<CssSelectorPtr> >();
+    m_sub_selectors->reserve(subselector_list->size());
     m_sub_selectors = subselector_list;
 }
 
-inline const DataContainer<CssSelectorPtr> &
+inline const shared_ptr<DataContainer<CssSelectorPtr> > &
 CssSelector::
 subSelectors() const
 {

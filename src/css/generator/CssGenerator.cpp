@@ -351,13 +351,13 @@ visit(const CssSelectorPtr &selector)
         m_output_buffer += selector->name();
 
     if (selector->selectorType() == CssSelector::PSEUDO_CLASS) {
-        if (!selector->subSelectors().empty()) {
+        if (selector->subSelectors() && !selector->subSelectors()->empty()) {
             m_output_buffer += '(';
 
-            for (const auto &subselector : selector->subSelectors()) {
+            for (const auto &subselector : *selector->subSelectors()) {
                 subselector->accept(*this);
 
-                if (&subselector != &selector->subSelectors().back())
+                if (&subselector != &selector->subSelectors()->back())
                     m_output_buffer += ',';
             }
 
@@ -365,9 +365,9 @@ visit(const CssSelectorPtr &selector)
         }
     }
     else if (selector->selectorType() == CssSelector::AN_PLUS_B) {
-        if (!selector->subSelectors().empty()) {
+        if (selector->subSelectors() && !selector->subSelectors()->empty()) {
             m_output_buffer += " of ";
-            for (const auto &subselector : selector->subSelectors())
+            for (const auto &subselector : *selector->subSelectors())
                 subselector->accept(*this);
         }
     }
