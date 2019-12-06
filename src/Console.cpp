@@ -89,5 +89,8 @@ fileSizeFormat(const int64_t &file_size)
         fs /= 1e3;
     }
 
-    return stringstream(String::numberFormat(fs, 2) + unit).str();
+    const auto result = (file_size <= 1e3 ? to_string(file_size) :
+        stringstream(String::numberFormat(fs, 2)).str()) + unit;
+
+    return result;
 }
