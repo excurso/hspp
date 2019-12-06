@@ -57,7 +57,8 @@ private:
     nextToken() const;
 
     inline bool
-    lookAhead();
+    lookAhead(),
+    lookBehind();
 
     const StyleSheetPtr
     parse();
@@ -106,10 +107,11 @@ private:
     parseSelectorList(),
     parseAttributeSelector(),
     parsePseudoClass(),
-    parsePseudoElement(),
+    parsePseudoElement();
 
+    static bool
     isPredefinedColor(const string &identifier),
-    isValidHexColor(const string &hex_color_literal) const noexcept;
+    isValidHexColor(const string &hex_color_literal);
 
     StyleSheetPtr m_stylesheet;
     stack<CssBaseElementPtr> m_tmp_result_stack;
@@ -152,6 +154,14 @@ CssParser::
 lookAhead()
 {
     while (advance() && currentToken()->isWhiteSpace());
+    return true;
+}
+
+inline bool
+CssParser::
+lookBehind()
+{
+    while (advance(-1) && currentToken()->isWhiteSpace());
     return true;
 }
 

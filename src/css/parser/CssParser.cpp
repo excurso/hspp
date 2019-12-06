@@ -84,7 +84,7 @@ parseStyleAttribute()
     if (parseDeclarationList()) {
         // Set AST elements
         m_stylesheet->setElements(m_tmp_list.top());
-        // Remove element from the top of the temporary element stack
+        // Remove element from the top of the temporal element stack
         m_tmp_list.pop();
     } else throwParseError("");
 
@@ -239,7 +239,7 @@ parseSelector()
         case CssToken::PUNCTUATOR:
             switch (currentToken()->content()[0]) {
             case '.':
-                if (!nextToken()->isIdentifier()) throwParseError("Invalid class name");
+                if (!nextToken()->isIdentifier() && advance()) throwParseError("Invalid class name");
                 advance();
                 current_selector = make_shared<CssSelector>(CssSelector::CLASS, parental_selector, currentToken()->content());
                 current_selector->setInitialPosition(currentToken()->row(), currentToken()->column() - 1);
@@ -306,6 +306,8 @@ parseSelectorCombination()
     CssBaseElementPtr left, right;
     CssSelectorCombinatorPtr combinator;
 
+    const auto start = getIterator();
+
     while (true) {
         if (combinator && left && right) {
             combinator->setLeft(left);
@@ -366,7 +368,12 @@ parseSelectorList()
         }
     } while (currentToken()->isPunctuator(',') && advance());
 
-    return !m_tmp_list.top().empty();
+    if (m_tmp_list.top().empty()) {
+        m_tmp_list.pop();
+        return false;
+    }
+
+    return true;
 }
 
 bool
@@ -1122,8 +1129,28 @@ parseDeclarationList()
             }
         } while (currentToken()->isPunctuator(';') && lookAhead());
 
+        // Handle the case with possibly missing ':' after property name
+        if (currentToken()->isIdentifier() && lookAhead() && !currentToken()->isPunctuator(':'))
+            throwParseError("Expected ':'");
+
+        // Handle the case with possibly missing semicolon after declaration
+        if (currentToken()->isPunctuator(':')) {
+            const auto iterator = getIterator();
+
+            lookBehind() && currentToken()->isIdentifier() && lookBehind();
+
+            const auto token = currentToken();
+            setIterator(iterator);
+
+            throwParseError("Possibly missing ';' after '" + token->content() +
+                            "' on row " + to_string(token->row()) + " column " +
+                            to_string(token->column()));
+        }
+
         return true;
     }
+
+    m_tmp_list.pop();
 
     return false;
 }
@@ -1429,7 +1456,7 @@ parseFunctionAlphaIE()
     return false;
 }
 
-bool
+/*static*/ bool
 CssParser::
 isPredefinedColor(const string &identifier)
 {
@@ -1440,9 +1467,9 @@ isPredefinedColor(const string &identifier)
     return false;
 }
 
-bool
+/*static*/ bool
 CssParser::
-isValidHexColor(const string &hex_color_literal) const noexcept
+isValidHexColor(const string &hex_color_literal)
 {
     switch(hex_color_literal.length()) {
     case 3: case 4: case 6: case 8:
@@ -1469,7 +1496,8 @@ throwParseError(const string &message) const
     cout << NEWLINE "[CSS PARSER]" NEWLINE;
 
     if (!currentToken()->isEof()) {
-        cout << "Parse error: Unexpected token '";
+        cout << "Parse error: Unexpected token "
+             << (currentToken()->isWhiteSpace() ? "<whitespace>" : "'");
 
         // This is needed because '@' is not part of the at rule token content
         // and '#' also is not part of the hash token.
@@ -1478,8 +1506,8 @@ throwParseError(const string &message) const
         else if (currentToken()->isHashLiteral())
             cout << '#';
 
-        cout << currentToken()->content()
-             << "' on row "
+        cout << (currentToken()->isWhiteSpace() ? "" : currentToken()->content() + "'")
+             << " on row "
              << currentToken()->row()
              << " column "
              << currentToken()->column()
