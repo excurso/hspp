@@ -65,10 +65,10 @@ void
 Config::
 readConf()
 {
-    string conf_file_content;
+    string config_file_content;
 
-    readConfigFile(CONFIG_FILE_PATH, conf_file_content);
-    parseConfigFileContent(conf_file_content);
+    readConfigFile(m_config_file, config_file_content);
+    parseConfigFileContent(config_file_content);
 }
 
 void

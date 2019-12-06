@@ -61,6 +61,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     "    --help                    Show this help" NEWLINE\
     "    --create-config-file      Create configuration file with" NEWLINE\
     "                              default settings" NEWLINE\
+    "    --config-file             Set the configuration file path" NEWLINE\
     "    --config-info             Show current configuration" NEWLINE\
     "    --stdo                    Use standard output" NEWLINE\
     "                              instead of a file" DBLNEWLINE\

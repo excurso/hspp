@@ -74,6 +74,7 @@ public:
     printConfigInfo();
 
     inline void
+    setConfigFilePath(const string &config_file_path),
     setInputPath(const string &path),
     setOutputPath(const string &path),
     setPhpIdArrayName(const string &name),
@@ -97,6 +98,7 @@ public:
     cssCommentTerms() const;
 
     inline const string
+    &configFilePath() const,
     &inputWorkingDirectory() const,
     &outputWorkingDirectory() const,
     &inputPath() const,
@@ -202,9 +204,19 @@ private:
 
     uint16_t m_bool_settings;
 
+    // Contains the path to config file
+    string m_config_file {CONFIG_FILE_PATH};
+
     // If configuration file has already been read...
     bool m_config_is_read;
 } extern cfg;
+
+inline void
+Config::
+setConfigFilePath(const string &config_file_path)
+{
+    m_config_file = config_file_path;
+}
 
 inline void
 Config::
@@ -232,6 +244,13 @@ Config::
 cssCommentTerms() const
 {
     return m_list_settings.find(CSS__COMMENT_TERMS)->second;
+}
+
+inline const string &
+Config::
+configFilePath() const
+{
+    return m_config_file;
 }
 
 inline const string &

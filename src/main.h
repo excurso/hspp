@@ -33,6 +33,7 @@ using namespace std;
 extern inline bool RETURN [[noreturn]] (const string &message);
 //inline bool RETURN [[noreturn]] (const string &message);
 inline bool isSet(const string &arg);
+inline string attrVal(const string &arg);
 void prepare(DataContainer<pair<const string, const string> > &args);
 bool parseArguments(DataContainer<string> &, DataContainer<pair<const string, const string> > &);
 bool isSupportedArgument(const string &arg);

@@ -45,6 +45,21 @@ int main(int argc, char **argv)
                 Console::write(APP_LICENSE_HEADER);
         }
 
+        if (isSet("--config-file")) {
+            string config_file_path = attrVal("--config-file");
+
+            if (config_file_path.empty() || !FileSystem::isAbsolutePath(config_file_path))
+                RETURN("Expected absolute file path after argument '--config-file'");
+
+            if (!FileSystem::exists(config_file_path))
+                RETURN("Passed config file does not exist.");
+
+            if (!FileSystem::isReadable(config_file_path))
+                RETURN("Passed config file is not readable. Check permissions.");
+
+            cfg.setConfigFilePath(config_file_path);
+        }
+
         if (argc == 1) {
             if (!cfg.isRead()) cfg.readConf();
 
@@ -55,7 +70,7 @@ int main(int argc, char **argv)
             }
         }
 
-        if (FileSystem::exists(CONFIG_FILE_PATH) && !isSet("--create-config-file"))
+        if (FileSystem::exists(cfg.configFilePath()) && !isSet("--create-config-file"))
             if (!cfg.isRead()) cfg.readConf();
 
         prepare(arg_pair_list);
@@ -128,7 +143,7 @@ bool parseArguments(DataContainer<string> &args, DataContainer<pair<const string
 bool isSupportedArgument(const string &arg)
 {
     const initializer_list<const string> supported_arg_list
-            = {"-i", "-o", "--help", "--create-config-file", "--config-info", "--stdo"};
+            = {"-i", "-o", "--help", "--create-config-file", "--config-info", "--config-file", "--stdo"};
 
     return find(supported_arg_list.begin(),
            supported_arg_list.end(),
@@ -145,7 +160,7 @@ inline bool isSet(const string &arg) {
 }
 
 /// Get the value passed with a specific command line argument
-inline const string attrVal(const string &arg) {
+inline string attrVal(const string &arg) {
     for (const auto &pair : arg_pair_list)
         if (pair.first == arg)
             return pair.second;
@@ -232,8 +247,8 @@ void prepare(DataContainer<pair<const string, const string> > &args)
     }
 
     if (isSet("--config-info")) {
-        !(args.size() == 1 && attrVal("--config-info").empty()) &&
-            RETURN("Use '--config-info' as the only argument.");
+        !(arg_pair_list.size() == 1 || (arg_pair_list.size() == 2 && isSet("--config-file"))) &&
+            RETURN("Use '--config-info' as the only argument or with '--config-file'.");
 
         cfg.printConfigInfo();
         exit(0);
