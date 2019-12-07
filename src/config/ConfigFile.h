@@ -83,7 +83,8 @@ inline void writeConfigFile()
         "minify_custom_properties       = " + boolSettingValue(Config::CSS__MINIFY_CUSTOM_PROPERTIES) + "\n"
         "minify_animation_names         = " + boolSettingValue(Config::CSS__MINIFY_ANIMATION_NAMES) + "\n"
         "rewrite_functions              = " + boolSettingValue(Config::CSS__REWRITE_FUNCTIONS) + "\n"
-        "remove_empty_rules             = " + boolSettingValue(Config::CSS__REMOVE_EMPTY_RULES);
+        "remove_empty_rules             = " + boolSettingValue(Config::CSS__REMOVE_EMPTY_RULES) + "\n"
+        "merge_media_rules              = " + boolSettingValue(Config::CSS__MERGE_MEDIA_RULES);
 
     FileSystemWorker::writeFile(CONFIG_FILE_PATH, config_file_content);
 }

@@ -126,6 +126,8 @@ private:
     };
 
     const Vendor m_vendor;
+
+    HashTable<string, const CssAtRulePtr> m_media_rules;
 };
 
 inline const CssTokenPtr

@@ -30,6 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 #include "../CssVendorPrefixes.h"
 #include "../parser/includes.h"
 #include "CssColorTable.h"
+#include "restructuring/CssRestructuring.h"
 #include <climits>
 #include <stack>
 
@@ -173,6 +174,8 @@ private:
     stack<CssBlockPtr> m_block_stack;
 
     const Vendor m_vendor;
+
+    CssRestructuring m_restructuring;
 };
 
 static bool

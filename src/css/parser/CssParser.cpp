@@ -701,7 +701,7 @@ parseAtRuleImport()
                 }
             }
 
-            if (!at_rule_import->expressions().front().empty()) {
+            if (!at_rule_import->expressions()->front().empty()) {
                 currentToken()->isPunctuator(';') && lookAhead();
                 m_tmp_result_stack.emplace(at_rule_import);
                 return true;
@@ -775,6 +775,7 @@ parseAtRuleMedia()
         const auto at_keyword_media = vendor_prefix + "media";
 
         if (currentToken()->isAtKeyword(at_keyword_media) && lookAhead()) {
+            const auto expression_start = getIterator();
             const auto at_rule_media = make_shared<CssAtRule>(at_keyword_media);
             const auto at_rule_block = make_shared<CssBlock>(CssBlock::CURLY);
 
@@ -786,15 +787,47 @@ parseAtRuleMedia()
                     at_rule_media->createList();
             }
 
-            if (currentToken()->isPunctuator('{') && lookAhead()) {
+            if (currentToken()->isPunctuator('{')) {
+                const auto expression_end = prevToken()->isWhiteSpace() ? getIterator()-2 : getIterator()-1;
+                lookAhead();
+
                 while (parseQualifiedRule() || parseAtRule() || parseComment()) {
                     at_rule_block->appendElement(m_tmp_result_stack.top());
                     m_tmp_result_stack.pop();
                 }
 
                 if (currentToken()->isPunctuator('}') && lookAhead()) {
+                    const auto media_rule_end = getIterator();
+
                     at_rule_media->setBlock(at_rule_block);
                     m_tmp_result_stack.emplace(at_rule_media);
+
+                    // ### Let same media rule exressions point to unique memory location
+                    string key;
+                    setIterator(expression_start);
+
+                    // Build key for hash table
+                    do {
+                        if (currentToken()->isWhiteSpace()) {
+                            if (nextToken()->isPunctuator(':') || prevToken()->isPunctuator(':'))
+                                continue;
+
+                            key += ' ';
+                        }
+                        else
+                            key += currentToken()->content();
+                    } while (getIterator() != expression_end && advance());
+
+                    const auto found = m_media_rules.find(key);
+
+                    if (found != m_media_rules.end()) {
+                        at_rule_media->setExpressions(found->second->expressions());
+                    } else {
+                        m_media_rules.emplace(key, at_rule_media);
+                    }
+                    // ###
+
+                    setIterator(media_rule_end);
 
                     return true;
                 }

@@ -22,5 +22,4 @@ using namespace CSS::Parsing::Elements;
 
 CssAtRule::CssAtRule(const string &keyword) :
     CssBaseElement(AT_RULE),
-    m_keyword(keyword),
-    m_expression_lists({DataContainer<CssBaseElementPtr>()}) {}
+    m_keyword(keyword) {}

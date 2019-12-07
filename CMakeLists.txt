@@ -119,6 +119,8 @@ add_executable(
 	src/css/minifier/CssMinifier.cpp
 
 	src/css/modifier/CssColorTable.h
+	src/css/modifier/restructuring/CssRestructuring.h
+	src/css/modifier/restructuring/CssRestructuring.cpp
 	src/css/modifier/CssModifier.h
 	src/css/modifier/CssModifier.cpp
 

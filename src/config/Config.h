@@ -49,6 +49,7 @@ public:
         CSS__MINIFY_ANIMATION_NAMES                 ,
         CSS__REWRITE_FUNCTIONS                      ,
         CSS__REMOVE_EMPTY_RULES                     ,
+        CSS__MERGE_MEDIA_RULES                      ,
 
         // string settings
         GENERAL__INPUT_WORKING_DIRECTORY            ,
@@ -88,9 +89,9 @@ public:
     disable(const initializer_list<const Setting> settings);
 
     inline bool
-    isEnabled(const uint16_t setting) const;
+    isEnabled(const uint32_t setting) const;
 
-    inline uint16_t
+    inline uint32_t
     boolSettings() const;
 
     inline const DataContainer<string>
@@ -119,7 +120,7 @@ private:
     setListSetting(const Setting setting, const DataContainer<string> &value_list),
     setStringSetting(const Setting setting, const string &value),
     setNumericSetting(const Setting setting, const uint8_t value),
-    setBoolSettings(const uint16_t settings),
+    setBoolSettings(const uint32_t settings),
 
     throwConfigFileError [[noreturn]] (const string &message, uint64_t line_number, uint64_t col_number);
 
@@ -175,7 +176,8 @@ private:
                 { "css_minify_custom_properties",           Config::CSS__MINIFY_CUSTOM_PROPERTIES },
                 { "css_minify_animation_names",             Config::CSS__MINIFY_ANIMATION_NAMES },
                 { "css_rewrite_functions",                  Config::CSS__REWRITE_FUNCTIONS },
-                { "css_remove_empty_rules",                 Config::CSS__REMOVE_EMPTY_RULES }
+                { "css_remove_empty_rules",                 Config::CSS__REMOVE_EMPTY_RULES },
+                { "css_merge_media_rules",                  Config::CSS__MERGE_MEDIA_RULES }
             }),
             string_settings({
                 { "general_input_working_directory",        Config::GENERAL__INPUT_WORKING_DIRECTORY },
@@ -202,7 +204,7 @@ private:
         bool_settings, string_settings, list_settings, numeric_settings;
     } const m_config_terms;
 
-    uint16_t m_bool_settings;
+    uint32_t m_bool_settings;
 
     // Contains the path to config file
     string m_config_file {CONFIG_FILE_PATH};
@@ -367,14 +369,14 @@ tabWidth() const
 
 inline bool
 Config::
-isEnabled(const uint16_t setting) const
+isEnabled(const uint32_t setting) const
 {
     const auto pos = static_cast<uint16_t>(1U << (setting - 1U));
     const bool isset = (m_bool_settings & pos) == pos;
     return isset;
 }
 
-inline uint16_t
+inline uint32_t
 Config::
 boolSettings() const
 {
@@ -443,7 +445,7 @@ setNumericSetting(const Setting setting, const uint8_t value)
 
 inline void
 Config::
-setBoolSettings(const uint16_t settings)
+setBoolSettings(const uint32_t settings)
 {
     m_bool_settings = settings;
 }

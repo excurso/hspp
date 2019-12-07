@@ -38,12 +38,13 @@ public:
     setKeyword(const string &keyword),
     setBlock(const CssBaseElementPtr &block),
     createList(),
+    setExpressions(const shared_ptr<DataContainer<DataContainer<CssBaseElementPtr> > > &expressions),
     appendExpression(const CssBaseElementPtr &component);
 
     inline const string &
     keyword() const;
 
-    inline const DataContainer<DataContainer<CssBaseElementPtr> > &
+    inline const shared_ptr<DataContainer<DataContainer<CssBaseElementPtr> > > &
     expressions() const;
 
     inline const CssBlockPtr &
@@ -51,7 +52,7 @@ public:
 
 private:
     CssIdentifier m_keyword;
-    DataContainer<DataContainer<CssBaseElementPtr> > m_expression_lists;
+    shared_ptr<DataContainer<DataContainer<CssBaseElementPtr> > > m_expression_lists;
     CssBlockPtr m_block;
 };
 
@@ -92,12 +93,24 @@ block() const
 
 inline void
 CssAtRule::
-appendExpression(const CssBaseElementPtr &component)
+setExpressions(const shared_ptr<DataContainer<DataContainer<CssBaseElementPtr> > > &expressions)
 {
-    m_expression_lists.back().emplace_back(component);
+    m_expression_lists = expressions;
 }
 
-inline const DataContainer<DataContainer<CssBaseElementPtr> > &
+inline void
+CssAtRule::
+appendExpression(const CssBaseElementPtr &component)
+{
+    if (!m_expression_lists) {
+        m_expression_lists = make_shared<DataContainer<DataContainer<CssBaseElementPtr> > >();
+        m_expression_lists->emplace_back(DataContainer<CssBaseElementPtr>());
+    }
+
+    m_expression_lists->back().emplace_back(component);
+}
+
+inline const shared_ptr<DataContainer<DataContainer<CssBaseElementPtr> > > &
 CssAtRule::
 expressions() const
 {
@@ -108,7 +121,7 @@ inline void
 CssAtRule::
 createList()
 {
-    m_expression_lists.emplace_back(DataContainer<CssBaseElementPtr>());
+    m_expression_lists->emplace_back(DataContainer<CssBaseElementPtr>());
 }
 
 using CssAtRulePtr = shared_ptr<CssAtRule>;

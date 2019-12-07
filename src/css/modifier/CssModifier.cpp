@@ -47,10 +47,11 @@ visit(const CssAtRulePtr &at_rule)
     if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "import")) {
         pushContext(AT_RULE_IMPORT);
         maybeImportStyleSheet(at_rule);
+        return;
     }
 
     if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "charset")) {
-        const auto &charset = static_pointer_cast<CssString>(at_rule->expressions().front().front());
+        const auto &charset = static_pointer_cast<CssString>(at_rule->expressions()->front().front());
         charset->setValue(String::toLower(charset->value()));
 
         if (s_use_utf8_bom) {
@@ -88,6 +89,12 @@ visit(const CssAtRulePtr &at_rule)
                 break;
             }
         }
+
+        return;
+    }
+
+    if (at_rule->keyword() == "media") {
+        m_restructuring.appendAtRuleMedia(at_rule);
     }
 
     if (at_rule->block()) {
@@ -95,7 +102,7 @@ visit(const CssAtRulePtr &at_rule)
             if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "keyframes")) {
                 // Minify animation names, if this is enabled in the config file or by default
                 if (s_minify_animation_names) {
-                    const auto &expressions = at_rule->expressions().front();
+                    const auto &expressions = at_rule->expressions()->front();
                     if (expressions.front() && expressions.front()->isIdentifier()) {
                         if (expressions.front()->isIdentifier()) {
                             const auto &animation_name = static_pointer_cast<CssIdentifier>(expressions.front());
@@ -124,7 +131,8 @@ visit(const CssAtRulePtr &at_rule)
 
             at_rule->block()->accept(*this);
 
-            if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "keyframes")) popContextIf(KEYFRAMES_BLOCK);
+            if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "keyframes"))
+                popContextIf(KEYFRAMES_BLOCK);
         } else {
             if (s_remove_empty_rules) {
                 m_block_stack.top()->removeElement(at_rule);
@@ -133,9 +141,10 @@ visit(const CssAtRulePtr &at_rule)
         }
     }
 
-    for (const auto &list : at_rule->expressions())
-        for (const auto &element : list)
-            element->accept(*this);
+    if (at_rule->expressions())
+        for (const auto &list : *at_rule->expressions())
+            for (const auto &element : list)
+                element->accept(*this);
 
     if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "import"))
         popContextIf(AT_RULE_IMPORT);
@@ -284,6 +293,11 @@ visit(const CssBlockPtr &block)
                  << " animation names\n"
                  << String::repeatChar('-', max_len + 18U) << "\n"
                  << endl;
+        }
+
+        if (m_stylesheets.size() == 1) {
+            m_restructuring.setStyleSheet(m_stylesheets.top());
+            m_restructuring.restructure();
         }
 
         m_stylesheets.pop();
@@ -1176,12 +1190,12 @@ maybeImportStyleSheet(const CssAtRulePtr &at_rule_import)
 
     ++s_import_depth;
 
-    if (!at_rule_import->expressions().empty() && !at_rule_import->expressions()[0].empty()) {
-        if (at_rule_import->expressions()[0][0]->isString()) {
-            const auto &string_element = static_pointer_cast<CssString>(at_rule_import->expressions()[0][0]);
+    if (!at_rule_import->expressions()->empty() && !at_rule_import->expressions()->at(0).empty()) {
+        if (at_rule_import->expressions()->at(0).at(0)->isString()) {
+            const auto &string_element = static_pointer_cast<CssString>(at_rule_import->expressions()->at(0).at(0));
             initial_import_path_value = string_element->value();
-        } else if (at_rule_import->expressions()[0][0]->isFunction()) {
-            const auto &function_element = static_pointer_cast<CssFunction>(at_rule_import->expressions()[0][0]);
+        } else if (at_rule_import->expressions()->at(0).at(0)->isFunction()) {
+            const auto &function_element = static_pointer_cast<CssFunction>(at_rule_import->expressions()->at(0).at(0));
 
             if (function_element->name("url")) {
                 const auto &string_element = static_pointer_cast<CssString>(function_element->parameters()[0][0]);
@@ -1212,20 +1226,20 @@ maybeImportStyleSheet(const CssAtRulePtr &at_rule_import)
 
         const auto &ast = CssParser::parse(file_content);
 
-        if ((!at_rule_import->expressions().empty() && at_rule_import->expressions()[0].size() > 1) ||
-             at_rule_import->expressions().size() > 1) {
+        if ((!at_rule_import->expressions()->empty() && at_rule_import->expressions()->at(0).size() > 1) ||
+             at_rule_import->expressions()->size() > 1) {
 
             const auto at_rule_media = make_shared<CssAtRule>("media");
             at_rule_media->setBlock(make_shared<CssBlock>(CssBlock::CURLY));
 
-            for (const auto &list : at_rule_import->expressions()) {
+            for (const auto &list : *at_rule_import->expressions()) {
                 for (const auto &expr : list)
-                    if (&list != &at_rule_import->expressions().front() ||
-                       (&list == &at_rule_import->expressions().front() &&
+                    if (&list != &at_rule_import->expressions()->front() ||
+                       (&list == &at_rule_import->expressions()->front() &&
                         &expr != &list.front()))
                         at_rule_media->appendExpression(expr);
 
-                if (&list != &at_rule_import->expressions().back())
+                if (&list != &at_rule_import->expressions()->back())
                     at_rule_media->createList();
             }
 

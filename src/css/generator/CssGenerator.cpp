@@ -40,16 +40,18 @@ visit(const CssAtRulePtr &at_rule)
 
     pushContext(AT_RULE_EXPRESSION_LIST);
 
-    for (const auto &list : at_rule->expressions()) {
-        for (const auto &element : list) {
-            if (m_output_buffer.back() != ',')
-                m_output_buffer += ' ';
+    if (at_rule->expressions()) {
+        for (const auto &list : *at_rule->expressions()) {
+            for (const auto &element : list) {
+                if (m_output_buffer.back() != ',')
+                    m_output_buffer += ' ';
 
-            element->accept(*this);
+                element->accept(*this);
+            }
+
+            if (&list != &at_rule->expressions()->back())
+                m_output_buffer += ',';
         }
-
-        if (&list != &at_rule->expressions().back())
-            m_output_buffer += ',';
     }
 
     popContext();
