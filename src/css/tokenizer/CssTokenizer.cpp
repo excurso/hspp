@@ -290,6 +290,8 @@ isComment()
     if (currentChar('/') && nextChar('*')) {
         const uint64_t start_column = currentColumn();
         advance(+2);
+        // Do not remove comment, if it starts with /*!
+        const auto keep_comment = currentChar('!');
         const auto begin = getIterator();
 
         while (!isEof(+1) && !(currentChar('*') && nextChar('/')) && advance());
@@ -307,7 +309,7 @@ isComment()
 //        }
 
         if (currentChar('*') && nextChar('/')) {
-            if (!cfg.isEnabled(Config::CSS__REMOVE_COMMENTS) ||
+            if (!cfg.isEnabled(Config::CSS__REMOVE_COMMENTS) || keep_comment ||
                 (comment_type == CssToken::COMMENT &&
                  String(comment_content).contains(cfg.cssCommentTerms())) ||
                 comment_type != CssToken::COMMENT) {
