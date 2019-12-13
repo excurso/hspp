@@ -29,11 +29,11 @@ HSPP is an optimizer and minifier for CSS files written in C++11.
 4. Output the modified AST information to a file or standard output
 
 ## Prebuilt binaries
-Visit the [download page](https://utilizer.de/hspp/?nav=3) to download
+Visit the [download page](https://utilizer.de/hspp/download) to download
 the prebuilt binaries for Linux and Windows.
 
 ## How to use?
-Visit the [documentation page](https://utilizer.de/hspp/?nav=1) to get started.
+Visit the [documentation page](https://utilizer.de/hspp/documentation) to get started.
 
 ## License
 This project is published under the GNU General Public License Version 3 (GPLv3).\
