@@ -60,8 +60,10 @@ writeFileSizeDifference(const int64_t input_size, const int64_t output_size, con
          << "Output size: "
          << output_size_1
          << (output_size > 1e3 ? output_size_2 : "")
-         << " [-" << to_string(input_size - output_size) << " bytes]"
-         << " [-" << String::numberFormat((1 - double(output_size) / input_size) * 1e2, 2) << "%]"
+         << " [" << (input_size > output_size ? '-' : '+')
+         << to_string(abs(input_size - output_size)) << " bytes]"
+         << " [" << (input_size > output_size ? '-' : '+')
+         << String::numberFormat(abs(1. - double(output_size) / input_size) * 1e2, 2) << "%]"
          << NEWLINE << endl;
 }
 
