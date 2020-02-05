@@ -34,6 +34,9 @@ public:
     appendElement(const T1 &key, const T2 &value),
     removeElement(const T1 &key);
 
+    T2
+    &setElement(T1 key, T2 &element);
+
     void
     iterateAll(function<void(T1 &)> function) const;
 };
@@ -52,6 +55,26 @@ HashTable<T1, T2>::
 removeElement(const T1 &key)
 {
     this->erase(this->find(key));
+}
+
+template<class T1, class T2>
+T2 &
+HashTable<T1, T2>::
+setElement(const T1 key, T2 &element)
+{
+    // If key exists, let element point to the existing element,
+    // else insert new element
+
+    const auto &found = this->find(key);
+
+    if (found != this->end()) {
+        element = found->second;
+    } else {
+        this->emplace(key, element);
+    }
+
+    // Return reference to already existing or newly inserted element.
+    return element;
 }
 
 #endif // HASHTABLE_H

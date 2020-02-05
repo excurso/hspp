@@ -31,6 +31,8 @@ class DataContainer : public vector<T>
 public:
     using vector<T>::vector;
 
+	DataContainer(size_t reserve_size);
+
     inline void
     appendElement(const T &element),
     removeElement(const T &element),
@@ -49,6 +51,12 @@ public:
     typename DataContainer<T>::iterator
     find(const T &element);
 };
+
+template<class T>
+DataContainer<T>::DataContainer(const size_t reserve_size)
+{
+	this->reserve(reserve_size);
+}
 
 template<class T>
 typename DataContainer<T>::iterator
