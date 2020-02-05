@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
 This source file is part of the project
 HyperSheetsPreprocessor (HSPP) - Optimizer and minifier for CSS
 Copyright (C) 2019 Waldemar Zimpel <hspp@utilizer.de>
@@ -21,11 +21,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 #include "../../filesystem/FileSystemWorker.h"
 using namespace CSS::Minification;
 
+shared_ptr<HashTable<string, IdentInfo<shared_ptr<string> > > >
+CSS::Minification::g_id_replacement_list = make_shared<HashTable<string, IdentInfo<shared_ptr<string> > > >(),
+CSS::Minification::g_class_replacement_list = make_shared<HashTable<string, IdentInfo<shared_ptr<string> > > >();
+
+shared_ptr<HashTable<string, IdentInfo<CssIdentifierPtr> > >
+CSS::Minification::g_cprop_replacement_list = make_shared<HashTable<string, IdentInfo<CssIdentifierPtr> > >(),
+CSS::Minification::g_anim_replacement_list = make_shared<HashTable<string, IdentInfo<CssIdentifierPtr> > >();
+
 CssModifier::CssModifier()
 {
     s_output_to_stdo                = cfg.isEnabled(Config::GENERAL__OUTPUT_TO_STDO);
     s_use_utf8_bom                  = cfg.isEnabled(Config::GENERAL__USE_UTF8_BOM);
-    s_create_php_include_file       = cfg.isEnabled(Config::GENERAL__CREATE_PHP_INCLUDE_FILE);
+    s_create_json_file              = cfg.isEnabled(Config::GENERAL__CREATE_JSON_FILE);
     s_include_external_stylesheets  = cfg.isEnabled(Config::CSS__INCLUDE_EXTERNAL_STYLESHEETS);
     s_remove_comments               = cfg.isEnabled(Config::CSS__REMOVE_COMMENTS);
     s_remove_empty_rules            = cfg.isEnabled(Config::CSS__REMOVE_EMPTY_RULES);
@@ -51,7 +59,7 @@ visit(const CssAtRulePtr &at_rule)
     }
 
     if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "charset")) {
-        const auto &charset = static_pointer_cast<CssString>(at_rule->expressions()->front().front());
+        const auto &charset = static_pointer_cast<CssString>(at_rule->expressions()->front()->front());
         charset->setValue(String::toLower(charset->value()));
 
         if (s_use_utf8_bom) {
@@ -103,25 +111,20 @@ visit(const CssAtRulePtr &at_rule)
                 // Minify animation names, if this is enabled in the config file or by default
                 if (s_minify_animation_names) {
                     const auto &expressions = at_rule->expressions()->front();
-                    if (expressions.front() && expressions.front()->isIdentifier()) {
-                        if (expressions.front()->isIdentifier()) {
-                            const auto &animation_name = static_pointer_cast<CssIdentifier>(expressions.front());
-                            if (!m_css_animation_name_definition_list->hasElement(animation_name->value()))
-                                m_css_animation_name_definition_list->emplace_back(animation_name->value());
+                    if (expressions->front() && expressions->front()->isIdentifier()) {
+                        const auto &identifier = static_pointer_cast<CssIdentifier>(expressions->front());
 
-                            const auto &found = m_css_animation_name_replacement_list->find(animation_name->value());
+                        const auto found = g_anim_replacement_list->find(identifier->value());
 
-                            if (found == m_css_animation_name_replacement_list->end()) {
-                                const auto &ident_pair = make_shared<IdentPair>(make_shared<string>(animation_name->value()));
-                                m_css_animation_name_replacement_list->emplace(animation_name->value(), ident_pair);
-                                // Let current identifier element point to the new entry inside the animation replacement list
-                                animation_name->setValue(ident_pair->replacement_id);
-                            } else {
-                                // Let current identifier element point to the existing entry inside the animation replacement list
-                                animation_name->setValue(found->second->replacement_id);
-                                // Increase appearance counter
-                                ++found->second->count;
-                            }
+                        if (found != g_anim_replacement_list->end()) {
+                            expressions->clear();
+                            expressions->emplace_back(found->second.identifier);
+
+                            ++found->second.count;
+                            found->second.defined = true;
+                        } else {
+                            auto ident_info = IdentInfo<CssIdentifierPtr>(identifier, true);
+                            g_anim_replacement_list->emplace(identifier->value(), ident_info);
                         }
                     }
                 }
@@ -133,17 +136,15 @@ visit(const CssAtRulePtr &at_rule)
 
             if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "keyframes"))
                 popContextIf(KEYFRAMES_BLOCK);
-        } else {
-            if (s_remove_empty_rules) {
-                m_block_stack.top()->removeElement(at_rule);
-                return;
-            }
+        } else if (s_remove_empty_rules) {
+            m_block_stack.top()->removeElement(at_rule);
+            return;
         }
     }
 
     if (at_rule->expressions())
         for (const auto &list : *at_rule->expressions())
-            for (const auto &element : list)
+            for (const auto &element : *list)
                 element->accept(*this);
 
     if (m_vendor.maybePrefixedKeyword(at_rule->keyword(), "import"))
@@ -189,81 +190,37 @@ visit(const CssBlockPtr &block)
             block->prependElement(utf8_bom);
         }
 
-        if (s_minify_ids)
-            generateIds();
-        if (s_minify_class_names)
-            generateClassNames();
-        if (s_minify_custom_properties)
-            generateCustomPropertyNames();
-        if (s_minify_animation_names)
-            generateAnimationNames();
-
-        if (s_minify_custom_properties) {
-            for (auto &cprop : *m_css_custom_property_replacement_list) {
-                const auto &found = m_css_custom_property_definition_list->find(cprop.first);
-
-                if (found == m_css_custom_property_definition_list->end()) {
-                    cout << "Undeclared custom property '"
-                         << cprop.first
-                         << "' renamed to '"
-                         << *cprop.second->replacement_id
-                         << "'"
-                         << endl;
-                }
-            }
-        }
-
-        m_css_custom_property_definition_list->clear();
-
-        if (s_minify_animation_names) {
-            for (auto &anim : *m_css_animation_name_replacement_list) {
-                const auto &found = m_css_animation_name_definition_list->find(anim.first);
-
-                if (found == m_css_animation_name_definition_list->end()) {
-                    cout << "Undeclared animation name '"
-                         << anim.first
-                         << "' renamed to '"
-                         << *anim.second->replacement_id
-                         << "'"
-                         << endl;
-                }
-            }
-        }
-
-        m_css_animation_name_definition_list->clear();
-
-        if (s_create_php_include_file &&
+        if (!s_output_to_stdo &&
             // Make sure, the file is written only on the initial input file
-            m_stylesheets.size() == 1 &&
-            !cfg.isEnabled(Config::GENERAL__OUTPUT_TO_STDO) &&
-            (s_minify_ids ||
-             s_minify_class_names ||
-             s_minify_custom_properties ||
-             s_minify_animation_names) &&
-            (!m_css_id_replacement_list->empty() ||
-             !m_css_class_replacement_list->empty() ||
-             !m_css_custom_property_replacement_list->empty() ||
-             !m_css_animation_name_replacement_list->empty())) {
-
-            if (!s_output_to_stdo)
-                Console::write("Writing PHP include file.\r");
-
-            writePhpIncludeFile(APP_NAME ".php");
-
-            if (!s_output_to_stdo)
-                Console::writeLine("[Done] Writing PHP include file.");
-        }
-
-        if (!s_output_to_stdo && s_minify_ids && s_minify_class_names &&
-            s_minify_custom_properties && s_minify_animation_names &&
-            // Output only on the initial input file
             m_stylesheets.size() == 1) {
 
+            if (s_minify_ids)
+                generateIds();
+            if (s_minify_class_names)
+                generateClassNames();
+            if (s_minify_custom_properties)
+                generateCustomPropertyNames();
+            if (s_minify_animation_names)
+                generateAnimationNames();
+
+            if ((!g_id_replacement_list->empty() ||
+                !g_class_replacement_list->empty() ||
+                !g_cprop_replacement_list->empty() ||
+                !g_anim_replacement_list->empty()) &&
+                // Make sure, the file is written only on the initial input file
+                (m_stylesheets.size() == 1 && !s_output_to_stdo)) {
+
+                writeJsonFile(APP_NAME ".json");
+            }
+        }
+
+        if (!s_output_to_stdo && m_stylesheets.size() == 1) {
+
             string
-            id_count = to_string(m_css_id_replacement_list->size()),
-            class_count = to_string(m_css_class_replacement_list->size()),
-            cprop_count = to_string(m_css_custom_property_replacement_list->size()),
-            anim_count = to_string(m_css_animation_name_replacement_list->size());
+            id_count = to_string(g_id_replacement_list->size()),
+            class_count = to_string(g_class_replacement_list->size()),
+            cprop_count = to_string(g_cprop_replacement_list->size()),
+            anim_count = to_string(g_anim_replacement_list->size());
 
             DataContainer<string> counter_data = {
                 id_count, class_count, cprop_count, anim_count
@@ -312,59 +269,87 @@ visit(const CssDeclarationPtr &declaration)
 {
     m_declaration = declaration;
 
-    // If custom property name minification is enabled in the config file or by default...
-    if (s_minify_custom_properties) {
-        if(declaration->namePtr()->isOfType(CssBaseElement::CUSTOM_PROPERTY)) {
-            if (!m_css_custom_property_definition_list->hasElement(declaration->name()))
-                m_css_custom_property_definition_list->emplace_back(declaration->name());
-
-            // Check if custom property name already exists inside the custom property replacement list
-            const auto &found = m_css_custom_property_replacement_list->find(declaration->name());
-
-            // If it already exists...
-            if (found != m_css_custom_property_replacement_list->end()) {
-                // Let identifier point to this entry
-                declaration->setName(found->second->replacement_id);
-                // Increment occurrence counter
-                ++found->second->count;
-            } else {
-                // Append it to the custom property replacement list
-                const auto &ident_pair = make_shared<IdentPair>(make_shared<string>(declaration->name()));
-                m_css_custom_property_replacement_list->emplace(declaration->name(), ident_pair);
-                // Let declaration name now point to the new entry of the custom property replacement list
-                declaration->setName(ident_pair->replacement_id);
-            }
-        }
-    }
-
-    // If animation name minification is enabled in the config file or by default...
-    if (s_minify_animation_names) {
-        if (declaration->name() == "animation" || declaration->name() == "animation-name") {
-            if (declaration->values().front()[0]->isIdentifier()) {
-                const auto &identifier = static_pointer_cast<CssIdentifier>(declaration->values().front()[0]);
-                const auto &found = m_css_animation_name_replacement_list->find(identifier->value());
-
-                if (identifier->value() != "none") {
-                    if (found != m_css_animation_name_replacement_list->end()) {
-                        identifier->setValue(found->second->replacement_id);
-                        ++found->second->count;
-                    } else {
-                        const auto &ident_pair = make_shared<IdentPair>(make_shared<string>(identifier->value()));
-                        m_css_animation_name_replacement_list->emplace(identifier->value(), ident_pair);
-                        identifier->setValue(ident_pair->replacement_id);
-                    }
-                }
-            }
-        }
-    }
-
-    pushContext(DECLARATION_PROPERTY_VALUE);
+    // Prevent z-index property value from being minified
+    // because z-index property expects an integer value
+    // https://www.w3.org/TR/CSS22/visuren.html#z-index
+    if (declaration->name({"z-index"}))
+        return;
 
     for (const auto &list : declaration->values())
         for (const auto &value : list)
             value->accept(*this);
 
-    popContextIf(DECLARATION_PROPERTY_VALUE);
+    if (declaration->namePtr()->isCustomProperty()) {
+        if (s_minify_custom_properties) {
+            const auto found = g_cprop_replacement_list->find(declaration->name());
+
+            if (found != g_cprop_replacement_list->end()) {
+                declaration->setName(found->second.identifier->valuePtr());
+                ++found->second.count;
+                found->second.defined = true;
+            } else {
+                auto ident_info = IdentInfo<CssIdentifierPtr>(declaration->namePtr(), true);
+                g_cprop_replacement_list->emplace(declaration->name(), ident_info);
+            }
+        }
+    }
+    else if (declaration->name({"animation", "animation-name"})) {
+        if (!declaration->values().front().empty() && declaration->values().front().front()->isIdentifier()) {
+            const auto &identifier = static_pointer_cast<CssIdentifier>(declaration->values().front().front());
+
+            auto found = g_anim_replacement_list->find(identifier->value());
+
+            if (found != g_anim_replacement_list->end()) {
+                declaration->values().front().front() = found->second.identifier;
+                ++found->second.count;
+            } else {
+                auto ident_info = IdentInfo<CssIdentifierPtr>(identifier, false);
+                g_anim_replacement_list->emplace(identifier->value(), ident_info);
+            }
+        }
+    }
+
+    // Rewrite shorthands
+    if (declaration->name({"margin", "padding", "border-width", "border-radius"})) {
+        if (declaration->values().size() == 1) {
+            auto &values = declaration->values().front();
+
+            switch (values.size()) {
+            case 2:
+                // Example: margin: 10px 10px => margin: 10px
+                if (values[0] == values[1])
+                    values.pop_back();
+
+                break;
+            case 3:
+                if (values[0] == values[2]) {
+                    if (values[0] == values[1])
+                        // Example: margin: 10px 10px 10px => margin: 10px
+                        while (&values.front() != &values.back())
+                            values.pop_back();
+                    else
+                        // Example: margin: 10px 20px 10px => margin: 10px 20px
+                        values.pop_back();
+                }
+
+                break;
+            case 4:
+                if (values[0] == values[2] &&
+                    values[1] == values[3]) {
+                    // Example: margin: 10px 10px 10px 10px => margin: 10px
+                    if (values[0] == values[3])
+                        while (&values.front() != &values.back())
+                            values.pop_back();
+                    else
+                        // Example: margin: 10px 20px 10px 20px => margin: 10px 20px
+                        while (&values.at(1) != &values.back())
+                            values.pop_back();
+                }
+
+                break;
+            }
+        }
+    }
 
     m_declaration = nullptr;
 }
@@ -374,8 +359,12 @@ CssModifier::
 visit(const CssNumberPtr &number)
 {
     // Try to minify numbers, if this is enabled in the config file or by default
-    if (s_minify_numbers)
+    if (s_minify_numbers) {
+        // https://drafts.csswg.org/css-values-3/#numbers
+
         number->setNumber(getShortNumber(number->value()));
+        replaceNumberWithScientificNotation(number);
+    }
 }
 
 void
@@ -483,23 +472,15 @@ void
 CssModifier::
 visit(const CssCustomPropertyPtr &custom_property)
 {
-    // If custom property minification is enabled in the config file or by default...
     if (s_minify_custom_properties) {
-        // Check if custom property name already exists inside the custom property replacement list
-        const auto &found = m_css_custom_property_replacement_list->find(custom_property->value());
+        auto found = g_cprop_replacement_list->find(custom_property->value());
 
-        // If it already exists...
-        if (found != m_css_custom_property_replacement_list->end()) {
-            // Let identifier point to this entry
-            custom_property->setValue(found->second->replacement_id);
-            // Increment occurrence counter
-            ++found->second->count;
+        if (found != g_cprop_replacement_list->end()) {
+            custom_property->setReplacementElement(found->second.identifier);
+            ++found->second.count;
         } else {
-            // Append it to the custom property replacement list
-            const auto &ident_pair = make_shared<IdentPair>(make_shared<string>(custom_property->value()));
-            m_css_custom_property_replacement_list->emplace(custom_property->value(), ident_pair);
-            // Let declaration name now point to the new entry of the custom property replacement list
-            custom_property->setValue(ident_pair->replacement_id);
+            auto ident_info = IdentInfo<CssIdentifierPtr>(custom_property);
+            g_cprop_replacement_list->emplace(custom_property->value(), ident_info);
         }
     }
 }
@@ -511,6 +492,12 @@ visit(const CssColorPtr &color)
     // Try to minify colors, if this is enabled in the config file or by default
     if (s_minify_colors) {
         if (color->colorType() == CssColor::PREDEFINED_NAME) {
+            if (s_use_rgba_hex_color_notation && color->value() == "transparent") {
+                color->setColorType(CssColor::HEX_LITERAL);
+                color->setValue("0000");
+                return;
+            }
+
             if (m_declaration) {
                 for (const auto &color_pair : s_css_color_table) {
                     if (color->value() == color_pair.first &&
@@ -554,11 +541,10 @@ visit(const CssQualifiedRulePtr &qualified_rule)
         if (!qualified_rule->block()->elements().empty())
             qualified_rule->block()->accept(*this);
         // Remove empty rules, if this is enabled in the config file or by default
-        else if (s_remove_empty_rules)
-            if (qualified_rule->block()->elements().empty()) {
-                m_block_stack.top()->removeElement(qualified_rule);
-                return;
-            }
+        else if (s_remove_empty_rules) {
+            m_block_stack.top()->removeElement(qualified_rule);
+            return;
+        }
     }
 
     // Iterate through all selectors of the current rule
@@ -610,45 +596,42 @@ visit(const CssSelectorPtr &selector)
 {
     // If current selector is a keyframes selector
     if (hasContext(KEYFRAMES_BLOCK)) {
-        // Replace "from" by "0%"
+        // Replace "from" with "0%"
         if (selector->name() == "from")
             selector->setName("0%");
-        // Replace "100%" by "to"
+        // Replace "100%" with "to"
         else if (selector->name() == "100%")
             selector->setName("to");
     }
 
-    if (selector->selectorType() == CssSelector::ID && s_minify_ids) {
-        const auto &found = m_css_id_replacement_list->find(selector->name());
+    switch (selector->selectorType()) {
+    case CssSelector::ID: {
+        const auto found = g_id_replacement_list->find(selector->name());
 
-        if (found == m_css_id_replacement_list->end()) {
-            // Create class list entry from selector's current value
-            const auto &ident_pair = make_shared<IdentPair>(make_shared<string>(selector->name()));
-            m_css_id_replacement_list->emplace(selector->name(), ident_pair);
-            // Let selector point to the newly created class list entry value
-            selector->setName(ident_pair->replacement_id);
+        if (found != g_id_replacement_list->end()) {
+            selector->setName(found->second.identifier);
+            ++found->second.count;
         } else {
-            // Let selector point to the already existent class list value
-            selector->setName(found->second->replacement_id);
-            // Increment occurrence counter
-            ++found->second->count;
+            auto ident_info = IdentInfo<shared_ptr<string> >(selector->namePtr());
+            g_id_replacement_list->emplace(selector->name(), ident_info);
         }
+
+        break;
     }
-    else if (selector->selectorType() == CssSelector::CLASS && s_minify_class_names) {
-        const auto &found = m_css_class_replacement_list->find(selector->name());
+    case CssSelector::CLASS: {
+        const auto found = g_class_replacement_list->find(selector->name());
 
-        if (found == m_css_class_replacement_list->end()) {
-            // Create class list entry from selector's current value
-            const auto ident_pair = make_shared<IdentPair>(make_shared<string>(selector->name()));
-            m_css_class_replacement_list->emplace(selector->name(), ident_pair);
-            // Let selector point to the replacement value
-            selector->setName(ident_pair->replacement_id);
+        if (found != g_class_replacement_list->end()) {
+            selector->setName(found->second.identifier);
+            ++found->second.count;
         } else {
-            // Let selector point to the already existent class list value
-            selector->setName(found->second->replacement_id);
-            // Increment occurrence counter
-            ++found->second->count;
+            auto ident_info = IdentInfo<shared_ptr<string> >(selector->namePtr());
+            g_class_replacement_list->emplace(selector->name(), ident_info);
         }
+
+        break;
+    }
+    default:;
     }
 
     if (selector->selectorType() == CssSelector::AN_PLUS_B) {
@@ -704,111 +687,267 @@ visit(const CssCommentPtr &)
 
 void
 CssModifier::
-writePhpIncludeFile(const string &file_name)
+writeJsonFile(const string &file_name)
 {
-    string buffer  = "<?php ";
+    string buffer = "{";
 
-    const auto writeArray = [&](const shared_ptr<HashTable<string, IdentPairPtr> > &list) -> void {
-            string php_array_name;
+    if (!g_id_replacement_list->empty()) {
+        buffer += "\"";
+        buffer += cfg.jsonIdObjectName();
+        buffer += "\":{";
 
-            if (&*list == &*m_css_id_replacement_list)
-                php_array_name = cfg.phpIdArrayName();
-            else if (&*list == &*m_css_class_replacement_list)
-                php_array_name = cfg.phpClassArrayName();
-            else if (&*list == &*m_css_custom_property_replacement_list)
-                php_array_name = cfg.phpCustomPropertyArrayName();
-            else if (&*list == &*m_css_animation_name_replacement_list)
-                php_array_name = cfg.phpAnimationArrayName();
+        for (auto element = g_id_replacement_list->begin(); element != g_id_replacement_list->end(); ++element) {
+            buffer += '\"';
+            buffer += element->first;
+            buffer += "\":\"";
+            buffer += *element->second.identifier;
+            buffer += "\"";
 
-            buffer += "$";
-            buffer += php_array_name;
-            buffer += "=array(";
+            if (next(element) != g_id_replacement_list->end())
+                buffer += ',';
+        }
 
-            for (auto itr = list->begin(); itr != list->end(); ++itr) {
-                buffer += "'";
-                buffer += itr->first;
-                buffer += "'=>'";
-                buffer += *itr->second->replacement_id;
-                buffer += "'";
+        buffer += '}';
+    }
 
-                if (next(itr) != list->end())
-                    buffer += ",";
+    if (!g_class_replacement_list->empty()) {
+        if (buffer.back() == '}')
+            buffer += ',';
+
+        buffer += "\"";
+        buffer += cfg.jsonClassObjectName();
+        buffer += "\":{";
+
+        for (auto element = g_class_replacement_list->begin(); element != g_class_replacement_list->end(); ++element) {
+            buffer += '\"';
+            buffer += element->first;
+            buffer += "\":\"";
+            buffer += *element->second.identifier;
+            buffer += "\"";
+
+            if (next(element) != g_class_replacement_list->end())
+                buffer += ',';
+        }
+
+        buffer += '}';
+    }
+
+    if (!g_cprop_replacement_list->empty()) {
+        if (buffer.back() == '}')
+            buffer += ',';
+
+        buffer += "\"";
+        buffer += cfg.jsonCustomPropertyObjectName();
+        buffer += "\":{";
+
+        for (auto element = g_cprop_replacement_list->begin(); element != g_cprop_replacement_list->end(); ++element) {
+            if (element->second.defined) {
+                buffer += '\"';
+                buffer += element->first;
+                buffer += "\":\"";
+                buffer += element->second.identifier->value();
+                buffer += "\"";
+
+                if (next(element) != g_cprop_replacement_list->end())
+                    buffer += ',';
             }
+        }
 
-            buffer += ");";
-    };
+        buffer += '}';
+    }
 
-    const auto lists = {
-        m_css_id_replacement_list,
-        m_css_class_replacement_list,
-        m_css_custom_property_replacement_list,
-        m_css_animation_name_replacement_list
-    };
+    if (!g_anim_replacement_list->empty()) {
+        if (buffer.back() == '}')
+            buffer += ',';
 
-    for (const auto &list : lists)
-        if (!list->empty())
-            writeArray(list);
+        buffer += "\"";
+        buffer += cfg.jsonAnimationObjectName();
+        buffer += "\":{";
 
-    buffer += "?>";
+        for (auto element = g_anim_replacement_list->begin(); element != g_anim_replacement_list->end(); ++element) {
+            if (element->second.defined) {
+                buffer += '\"';
+                buffer += element->first;
+                buffer += "\":\"";
+                buffer += element->second.identifier->value();
+                buffer += "\"";
+
+                if (next(element) != g_anim_replacement_list->end())
+                    buffer += ',';
+            }
+        }
+
+        buffer += '}';
+    }
+
+    buffer += '}';
 
     FileSystemWorker::writeFile(cfg.outputPath() + DIR_SEP + file_name, buffer);
 }
 
 void
 CssModifier::
-generateNames(shared_ptr<HashTable<string, IdentPairPtr> > &list, string &name)
-{
-    // Sorting rule
-    const auto sorting_condition =
-    [](const IdentPairPtr &a, const IdentPairPtr &b)
-    { return a->original_id->length() * a->count < b->original_id->length() * b->count; };
-
-    // Create temporal container
-    DataContainer<IdentPairPtr> vect;
-
-    // Fill temporal container with pointers to entries of the replacement list
-    for (const auto &key_value_pair : *list)
-        vect.emplace_back(key_value_pair.second);
-
-    // Sort only if container size is greater than 52
-    if (vect.size() > 52)
-        sort(vect.rbegin(), vect.rend(), sorting_condition);
-
-    // Generate replacement IDs for all the empty entries in the container
-    for (size_t i = 0; i < vect.size(); ++i)
-        if (vect[i]->replacement_id->empty())
-            *vect[i]->replacement_id = getShortId(name);
-}
-
-void
-CssModifier::
 generateIds()
 {
-    generateNames(m_css_id_replacement_list, m_id_replacement_name);
+    if (g_id_replacement_list->size() > 52) {
+        // Sorting rule
+        const auto sorting_condition =
+        [](const IdentInfo<shared_ptr<string> > &a, const IdentInfo<shared_ptr<string> > &b) {
+            return a.identifier->length() * a.count < b.identifier->length() * b.count;
+        };
+
+        // Create temporal container
+        DataContainer<IdentInfo<shared_ptr<string> > > vect(g_id_replacement_list->size());
+
+        // Fill temporal container with pointers to entries of the replacement list
+        for (const auto &pair : *g_id_replacement_list)
+            vect.emplace_back(pair.second);
+
+        sort(vect.rbegin(), vect.rend(), sorting_condition);
+
+        // Generate replacement IDs for all the entries in the container
+        for (const auto &pair : vect)
+            *pair.identifier = getShortId(m_id_replacement_name);
+
+        return;
+    }
+
+    for (const auto &pair : *g_id_replacement_list)
+        *pair.second.identifier = getShortId(m_id_replacement_name);
 }
 
 void
 CssModifier::
 generateClassNames()
 {
-    generateNames(m_css_class_replacement_list, m_class_replacement_name);
+    if (g_class_replacement_list->size() > 52) {
+        // Sorting rule
+        const auto sorting_condition =
+        [](const IdentInfo<shared_ptr<string> > &a, const IdentInfo<shared_ptr<string> > &b) {
+            return a.identifier->length() * a.count < b.identifier->length() * b.count;
+        };
+
+        // Create temporal container
+        DataContainer<IdentInfo<shared_ptr<string> > > vect(g_class_replacement_list->size());
+
+        // Fill temporal container with pointers to entries of the replacement list
+        for (const auto &pair : *g_class_replacement_list)
+            vect.emplace_back(pair.second);
+
+        sort(vect.rbegin(), vect.rend(), sorting_condition);
+
+        // Generate replacement IDs for all the entries in the container
+        for (const auto &pair : vect)
+            *pair.identifier = getShortId(m_class_replacement_name);
+
+        return;
+    }
+
+    for (const auto &pair : *g_class_replacement_list)
+        *pair.second.identifier = getShortId(m_class_replacement_name);
 }
 
 void
 CssModifier::
 generateCustomPropertyNames()
 {
-    generateNames(m_css_custom_property_replacement_list, m_cprop_replacement_name);
+    const auto writeUndeclaredCPropMsg = [](const string &cprop_name, const string &replacement_name){
+        Console::writeLine("Undeclared custom property '--" + cprop_name + "' hast been renamed to '--" + replacement_name + "'.");
+    };
+
+    if (g_cprop_replacement_list->size() > 52) {
+        // Sorting rule
+        const auto sorting_condition =
+        [](const IdentInfo<CssIdentifierPtr> &a, const IdentInfo<CssIdentifierPtr> &b) {
+            return a.identifier->value().length() * a.count < b.identifier->value().length() * b.count;
+        };
+
+        // Create temporal container
+        DataContainer<IdentInfo<CssIdentifierPtr> > vect(g_cprop_replacement_list->size());
+
+        // Fill temporal container with pointers to entries of the replacement list
+        for (const auto &pair : *g_cprop_replacement_list)
+            vect.emplace_back(pair.second);
+
+        sort(vect.rbegin(), vect.rend(), sorting_condition);
+
+        string tmp_name;
+
+        // Generate replacement IDs for all the entries in the container
+        for (const auto &pair : vect) {
+            if (!pair.defined)
+                tmp_name = pair.identifier->value();
+
+            pair.identifier->setValue(getShortId(m_cprop_replacement_name));
+
+            if (!pair.defined) {
+                writeUndeclaredCPropMsg(tmp_name, pair.identifier->value());
+                tmp_name.clear();
+            }
+        }
+
+        return;
+    }
+
+    for (const auto &pair : *g_cprop_replacement_list) {
+        pair.second.identifier->setValue(getShortId(m_cprop_replacement_name));
+
+        if (!pair.second.defined)
+            writeUndeclaredCPropMsg(pair.first, pair.second.identifier->value());
+    }
 }
 
 void
 CssModifier::
 generateAnimationNames()
 {
-    generateNames(m_css_animation_name_replacement_list, m_animation_replacement_name);
+    const auto writeUndeclaredAnimNameMsg = [](const string &anim_name, const string &replacement_name){
+        Console::writeLine("Undeclared animation '" + anim_name + "' has been renamed to '" + replacement_name + "'.");
+    };
+
+    if (g_anim_replacement_list->size() > 52) {
+        // Sorting rule
+        const auto sorting_condition =
+        [](const IdentInfo<CssIdentifierPtr> &a, const IdentInfo<CssIdentifierPtr> &b) {
+            return a.identifier->value().length() * a.count < b.identifier->value().length() * b.count;
+        };
+
+        // Create temporal container
+        DataContainer<IdentInfo<CssIdentifierPtr> > vect(g_anim_replacement_list->size());
+
+        // Fill temporal container with pointers to entries of the replacement list
+        for (const auto &pair : *g_anim_replacement_list)
+            vect.emplace_back(pair.second);
+
+        sort(vect.rbegin(), vect.rend(), sorting_condition);
+
+        string tmp_name;
+
+        // Generate replacement IDs for all the entries in the container
+        for (const auto &pair : vect) {
+            if (!pair.defined)
+                tmp_name = pair.identifier->value();
+
+            pair.identifier->setValue(getShortId(m_animation_replacement_name));
+
+            if (!pair.defined) {
+                writeUndeclaredAnimNameMsg(tmp_name, pair.identifier->value());
+                tmp_name.clear();
+            }
+        }
+
+        return;
+    }
+
+    for (const auto &pair : *g_anim_replacement_list) {
+        pair.second.identifier->setValue(getShortId(m_animation_replacement_name));
+
+        if (!pair.second.defined)
+            writeUndeclaredAnimNameMsg(pair.first, pair.second.identifier->value());
+    }
 }
 
-const string
+string
 CssModifier::
 getShortHexColorValue(const string &hex_value)
 {
@@ -849,47 +988,76 @@ getShortHexColorValue(const string &hex_value)
     return hex_value;
 }
 
-const string
+/*static*/ string
 CssModifier::
-getShortNumber(const string &number_value)
+getShortNumber(string number_value)
 {
-    string value = number_value;
-
     // Remove leading zeros
-    while (value.front() == '0' && value.length() > 1)
-        value.erase(value.begin());
+    while (number_value.front() == '0' && number_value.length() > 1)
+        number_value.erase(number_value.begin());
 
     // If number contains a dot...
-    if (String::contains(value, '.')) {
+    if (String::contains(number_value, '.')) {
         // Remove trailing zeros
-        while (value.back() == '0') value.pop_back();
+        while (number_value.back() == '0') number_value.pop_back();
         // Remove trailing dot
-        if (value.back() == '.') value.pop_back();
+        if (number_value.back() == '.') number_value.pop_back();
         // If value is an empty string now, set it to zero.
-        if (value.empty()) value = "0";
+        if (number_value.empty()) number_value = "0";
     }
-    // If number does not contain a dot...
-    else {
-        for (auto itr = value.rbegin(); itr != value.rend(); ++itr) {
-            // If number ends with some zeros, iterate through value
-            // until a non-zero digit is found
-            if (*itr == '0') continue;
+//    // If number does not contain a dot...
+//    else {
+//        for (auto itr = value.rbegin(); itr != value.rend(); ++itr) {
+//            // If number ends with some zeros, iterate through value
+//            // until a non-zero digit is found
+//            if (*itr == '0') continue;
 
-            // Get count of zeroes
-            const auto diff = distance(value.rbegin(), itr);
+//            // Get count of zeroes
+//            const auto diff = distance(value.rbegin(), itr);
 
-            // If zero count is greater than 2...
-            if (diff > 2) {
-                // Replace number with the equivalent scientific notation
-                // Example: 10000 => 1e4
-                value = string(value.begin(), itr.base()) + 'e' + to_string(diff);
-            }
+//            // If zero count is greater than 2...
+//            if (diff > 2) {
+//                // Replace number with the equivalent scientific notation
+//                // Example: 10000 => 1e4
+//                value = string(value.begin(), itr.base()) + 'e' + to_string(diff);
+//            }
 
-            break;
+//            break;
+//        }
+//    }
+
+    return number_value;
+}
+
+/*static*/ bool
+CssModifier::
+replaceNumberWithScientificNotation(const CssNumberPtr &number_element)
+{
+    // https://drafts.csswg.org/css-values-3/#numbers
+
+    for (auto itr = number_element->value().rbegin(); itr != number_element->value().rend(); ++itr) {
+        // If number ends with some zeros, iterate through value
+        // until a non-zero digit is found
+        if (*itr == '0') continue;
+
+        // Get count of zeroes
+        const auto diff = distance(number_element->value().rbegin(), itr);
+
+        // If zero count is greater than 2...
+        if (diff > 2) {
+            // Replace number with the equivalent scientific notation
+            // Example: 10000 => 1e4
+
+            number_element->setNumber(string(number_element->value().begin(), itr.base()));
+            number_element->setScientificPostfix('e' + to_string(diff));
+
+            return true;
         }
+
+        break;
     }
 
-    return value;
+    return false;
 }
 
 /*static*/ void
@@ -960,7 +1128,12 @@ replaceRgbaFuncWithRgbaHexColor(const CssFunctionPtr &function)
                     uint8_a = uint8_t(round(2.55F * stof(static_pointer_cast<CssPercentage>(a_base_elem)->value())));
 
                 if (uint8_a == 0U) {
-                    const auto color = make_shared<CssColor>(CssColor::PREDEFINED_NAME, "transparent");
+                    CssColorPtr color;
+                    if (s_use_rgba_hex_color_notation)
+                        color = make_shared<CssColor>(CssColor::HEX_LITERAL, "0000");
+                    else
+                        color = make_shared<CssColor>(CssColor::PREDEFINED_NAME, "transparent");
+
                     function->setReplacementElement(color);
                     return;
                 }
@@ -1055,8 +1228,14 @@ maybeManipulateHslaFunction(const CssFunctionPtr &function)
                 a *= stof(a_elem->value());
 
             if (a == 0.0F) {
-                const auto identifier = make_shared<CssIdentifier>("transparent");
-                function->setReplacementElement(identifier);
+                CssColorPtr color;
+                if (s_use_rgba_hex_color_notation)
+                    color = make_shared<CssColor>(CssColor::HEX_LITERAL, "0000");
+                else
+                    color = make_shared<CssColor>(CssColor::PREDEFINED_NAME, "transparent");
+
+                function->setReplacementElement(color);
+
                 return;
             }
         }
@@ -1138,7 +1317,7 @@ maybeManipulateHslaFunction(const CssFunctionPtr &function)
             rgba_param_length = str_r.length() + str_g.length() + str_b.length() + str_a_length;
 
             if (hsla_param_length <= rgba_param_length) {
-                const auto &number = make_shared<CssNumber>(percentageToNumber(a_elem->value()));
+                const auto number = make_shared<CssNumber>(a_elem->value());
                 a_elem->setReplacementElement(number);
                 return;
             }
@@ -1152,7 +1331,7 @@ maybeManipulateHslaFunction(const CssFunctionPtr &function)
     }
 }
 
-/*static*/ const string
+/*static*/ string
 CssModifier::
 getHexColorFromRGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
@@ -1190,12 +1369,12 @@ maybeImportStyleSheet(const CssAtRulePtr &at_rule_import)
 
     ++s_import_depth;
 
-    if (!at_rule_import->expressions()->empty() && !at_rule_import->expressions()->at(0).empty()) {
-        if (at_rule_import->expressions()->at(0).at(0)->isString()) {
-            const auto &string_element = static_pointer_cast<CssString>(at_rule_import->expressions()->at(0).at(0));
+    if (!at_rule_import->expressions()->empty() && !at_rule_import->expressions()->at(0)->empty()) {
+        if (at_rule_import->expressions()->at(0)->at(0)->isString()) {
+            const auto &string_element = static_pointer_cast<CssString>(at_rule_import->expressions()->at(0)->at(0));
             initial_import_path_value = string_element->value();
-        } else if (at_rule_import->expressions()->at(0).at(0)->isFunction()) {
-            const auto &function_element = static_pointer_cast<CssFunction>(at_rule_import->expressions()->at(0).at(0));
+        } else if (at_rule_import->expressions()->at(0)->at(0)->isFunction()) {
+            const auto &function_element = static_pointer_cast<CssFunction>(at_rule_import->expressions()->at(0)->at(0));
 
             if (function_element->name("url")) {
                 const auto &string_element = static_pointer_cast<CssString>(function_element->parameters()[0][0]);
@@ -1226,17 +1405,17 @@ maybeImportStyleSheet(const CssAtRulePtr &at_rule_import)
 
         const auto &ast = CssParser::parse(file_content);
 
-        if ((!at_rule_import->expressions()->empty() && at_rule_import->expressions()->at(0).size() > 1) ||
+        if ((!at_rule_import->expressions()->empty() && at_rule_import->expressions()->at(0)->size() > 1) ||
              at_rule_import->expressions()->size() > 1) {
 
             const auto at_rule_media = make_shared<CssAtRule>("media");
             at_rule_media->setBlock(make_shared<CssBlock>(CssBlock::CURLY));
 
             for (const auto &list : *at_rule_import->expressions()) {
-                for (const auto &expr : list)
+                for (const auto &expr : *list)
                     if (&list != &at_rule_import->expressions()->front() ||
                        (&list == &at_rule_import->expressions()->front() &&
-                        &expr != &list.front()))
+                        &expr != &list->front()))
                         at_rule_media->appendExpression(expr);
 
                 if (&list != &at_rule_import->expressions()->back())
@@ -1317,7 +1496,7 @@ getStringNumberPrecision(const string &number)
     return 0;
 }
 
-/*static*/ const string
+/*static*/ string
 CssModifier::
 cutStringNumberToPrecision(string number, const uint8_t precision)
 {

@@ -59,7 +59,6 @@ add_executable(
 	src/general/minifier/GeneralMinifier.h
 	src/general/minifier/GeneralMinifier.cpp
 
-	src/general/modifier/IdentPair.h
 	src/general/modifier/GeneralModifier.h
 	src/general/modifier/GeneralModifier.cpp
 
@@ -119,6 +118,8 @@ add_executable(
 	src/css/minifier/CssMinifier.cpp
 
 	src/css/modifier/CssColorTable.h
+	src/css/modifier/IdentInfo.h
+	src/css/modifier/IdentInfo.cpp
 	src/css/modifier/restructuring/CssRestructuring.h
 	src/css/modifier/restructuring/CssRestructuring.cpp
 	src/css/modifier/CssModifier.h

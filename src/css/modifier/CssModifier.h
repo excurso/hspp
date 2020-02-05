@@ -26,9 +26,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 #include "../../String.h"
 #include "../../filesystem/FileSystem.h"
 #include "../../general/modifier/GeneralModifier.h"
-#include "../../general/modifier/IdentPair.h"
 #include "../CssVendorPrefixes.h"
 #include "../parser/includes.h"
+#include "IdentInfo.h"
 #include "CssColorTable.h"
 #include "restructuring/CssRestructuring.h"
 #include <climits>
@@ -43,9 +43,9 @@ using namespace General::Minification;
 using CssVisitorInterface =
     VisitorInterface<CssAtRulePtr, CssBlockPtr, CssDeclarationPtr, CssPercentagePtr,
                      CssDimensionPtr, CssFunctionPtr, CssIdentifierPtr, CssCustomPropertyPtr,
-                     CssNumberPtr, CssColorPtr, CssQualifiedRulePtr, CssStringPtr, CssSelectorPtr,
-                     CssSelectorAttributePtr, CssSelectorCombinatorPtr, CssDelimiterPtr,
-                     CssUnicodeRangePtr, CssSupportsConditionPtr, CssCommentPtr>;
+                     CssNumberPtr, CssColorPtr, CssQualifiedRulePtr, CssStringPtr,
+                     CssSelectorPtr, CssSelectorAttributePtr, CssSelectorCombinatorPtr,
+                     CssDelimiterPtr, CssUnicodeRangePtr, CssSupportsConditionPtr, CssCommentPtr>;
 
 class CssModifier final : public CssVisitorInterface, private GeneralModifier
 {
@@ -74,29 +74,14 @@ public:
     visit(const CssSupportsConditionPtr &)    override,
     visit(const CssCommentPtr &)              override;
 
-    inline const shared_ptr<HashTable<string, IdentPairPtr> >
-    /// Returns the id replacement list
-    &getIdReplacementList() const,
-
-    /// Returns the class name replacement list
-    &getClassReplacementList() const,
-
-    /// Returns the custom property replacement list
-    getCustomPropertyReplacementList() const,
-
-    /// Returns the animation name replacement list
-    getAnimationNameReplacementList() const;
-
 private:
     enum Context : uint8_t {
         STYLESHEET, FUNCTION_URL, KEYFRAMES_BLOCK, AT_RULE_IMPORT,
-        DEFAULT_BLOCK, CURLY_BLOCK, PAREN_BLOCK, SQUARE_BLOCK,
-        DECLARATION_PROPERTY_VALUE
+        DEFAULT_BLOCK, CURLY_BLOCK, PAREN_BLOCK, SQUARE_BLOCK
     };
 
     void
     // Generate replacement identifiers
-    generateNames(shared_ptr<HashTable<string, IdentPairPtr> > &list, string &name),
     generateIds(),
     generateClassNames(),
     generateCustomPropertyNames(),
@@ -112,14 +97,15 @@ private:
     context(const Context context) const,
     context(const initializer_list<const Context> candidates) const;
 
-    void writePhpIncludeFile(const string &file_name);
+    void
+    writeJsonFile(const string &file_name);
 
-    static const string
+    static string
     /// Returns a possibly minified version of a hex color
     getShortHexColorValue(const string &hex_value),
 
     /// Returns a possibly minified version of a number
-    getShortNumber(const string &number_value),
+    getShortNumber(string number_value),
     /// Returns an RGB/RGBA hex color value from decimal values
     getHexColorFromRGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a = UCHAR_MAX),
 
@@ -130,6 +116,10 @@ private:
 
     static void
     maybeManipulateHslaFunction(const CssFunctionPtr &function);
+
+    static bool
+    /// If possible, replaces number with the scientific notation
+    replaceNumberWithScientificNotation(const CssNumberPtr &number_element);
 
     static inline void
     maybeRewriteLinearGradientFunction(const CssFunctionPtr &function);
@@ -145,20 +135,6 @@ private:
 
     static bool
     minifyAngle(const CssDimensionPtr &dimension);
-
-    shared_ptr<DataContainer<string> >
-    m_css_custom_property_definition_list   {make_shared<DataContainer<string> >()},
-    m_css_animation_name_definition_list    {make_shared<DataContainer<string> >()};
-
-    shared_ptr<HashTable<string, IdentPairPtr> >
-    /// Identifier replacement list
-    m_css_id_replacement_list               {make_shared<HashTable<string, IdentPairPtr> >()},
-    /// Class name replacement list
-    m_css_class_replacement_list            {make_shared<HashTable<string, IdentPairPtr> >()},
-    /// Custom property replacement list
-    m_css_custom_property_replacement_list  {make_shared<HashTable<string, IdentPairPtr> >()},
-    /// Keyframes animation name replacement list
-    m_css_animation_name_replacement_list   {make_shared<HashTable<string, IdentPairPtr> >()};
 
     string
     m_id_replacement_name,
@@ -181,7 +157,7 @@ private:
 static bool
 s_output_to_stdo = false,
 s_use_utf8_bom = false,
-s_create_php_include_file = false,
+s_create_json_file = false,
 s_include_external_stylesheets = false,
 s_remove_comments = false,
 s_remove_empty_rules = false,
@@ -195,35 +171,15 @@ s_rewrite_angles = false,
 s_use_rgba_hex_color_notation = false,
 s_rewrite_functions = false;
 
+extern shared_ptr<HashTable<string, IdentInfo<shared_ptr<string> > > >
+g_id_replacement_list,
+g_class_replacement_list;
+
+extern shared_ptr<HashTable<string, IdentInfo<CssIdentifierPtr> > >
+g_cprop_replacement_list,
+g_anim_replacement_list;
+
 static uint8_t s_import_depth = 0;
-
-inline const shared_ptr<HashTable<string, IdentPairPtr> > &
-CssModifier::
-getIdReplacementList() const
-{
-    return m_css_id_replacement_list;
-}
-
-inline const shared_ptr<HashTable<string, IdentPairPtr> > &
-CssModifier::
-getClassReplacementList() const
-{
-    return m_css_class_replacement_list;
-}
-
-inline const shared_ptr<HashTable<string, IdentPairPtr> >
-CssModifier::
-getCustomPropertyReplacementList() const
-{
-    return m_css_custom_property_replacement_list;
-}
-
-inline const shared_ptr<HashTable<string, IdentPairPtr> >
-CssModifier::
-getAnimationNameReplacementList() const
-{
-    return m_css_animation_name_replacement_list;
-}
 
 inline void
 CssModifier::
@@ -236,21 +192,18 @@ inline void
 CssModifier::
 popContextIf(const Context expected_context)
 {
+    if (m_context_stack.empty()) return;
+
     if (m_context_stack.back() == expected_context)
         m_context_stack.pop_back();
-
-#ifdef DEBUG
-    else RETURN(string(__FUNCTION__) + "()" NEWLINE
-                "Wrong context." NEWLINE
-                "Current context: " + to_string(m_context_stack.back()) + NEWLINE
-                "Expected context: " + to_string(expected_context));
-#endif
 }
 
 inline void
 CssModifier::
 popContextIf(const initializer_list<const Context> candidates)
 {
+    if (m_context_stack.empty()) return;
+
     for (const auto &context : candidates)
         if (m_context_stack.back() == context) {
             m_context_stack.pop_back();
@@ -262,7 +215,7 @@ inline bool
 CssModifier::
 context(const Context context) const
 {
-    return m_context_stack.back() == context;
+    return !m_context_stack.empty() && m_context_stack.back() == context;
 }
 
 inline bool
@@ -306,7 +259,7 @@ maybeRewriteLinearGradientFunction(const CssFunctionPtr &function)
 
                 if (identifier->value({"canvas", "text", "linktext", "visitedtext", "activetext",
                                        "buttonface", "buttontext", "field", "fieldtext", "highlight",
-                                      "highlighttext", "graytext"})) {
+                                       "highlighttext", "graytext"})) {
                     return true;
                 }
             }
@@ -324,7 +277,7 @@ maybeRewriteLinearGradientFunction(const CssFunctionPtr &function)
             if (element->isFunction()) {
                 const auto &func = static_pointer_cast<CssFunction>(element);
 
-                if (!func->name({"rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "gray", "color", "device-cmyk"}))
+                if (!func->name({"var", "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "gray", "color", "device-cmyk"}))
                     return false;
             }
             else if (!isSystemColor(element))
@@ -405,8 +358,7 @@ maybeRewriteLinearGradientFunction(const CssFunctionPtr &function)
 
         /// Reverses color stops and recalculates percentages, if drawing direction has changed.
         /// Handles percentages only.
-        const auto reverseColorStops = [&removeUnnecessaryPercentages](DataContainer<DataContainer<CssBaseElementPtr> >::iterator begin, DataContainer<DataContainer<CssBaseElementPtr> >::iterator end) -> bool {
-            if (removeUnnecessaryPercentages(begin, end)) {
+        const auto reverseColorStops = [](DataContainer<DataContainer<CssBaseElementPtr> >::iterator begin, DataContainer<DataContainer<CssBaseElementPtr> >::iterator end) -> bool {
                 CssBaseElementPtr percentage_base = nullptr;
 
                 for (auto itr = begin; itr != end; ++itr) {
@@ -439,9 +391,6 @@ maybeRewriteLinearGradientFunction(const CssFunctionPtr &function)
 
                 reverse(begin, end);
                 return true;
-            }
-
-            return false;
         };
 
 
@@ -482,27 +431,34 @@ maybeRewriteLinearGradientFunction(const CssFunctionPtr &function)
             if (param1.front()->isDimension()) {
                 const auto &dimension = static_pointer_cast<CssDimension>(param1.front());
 
-                if (minifyAngle(dimension)) {
-                    if ((dimension->value("0") && reverseColorStops(params.begin()+1, params.end())) ||
-                        (dimension->value("180") && dimension->unit("deg")))
-                        params.erase(params.begin());
-                    else if (dimension->unit("deg")) {
-                        double angle = stod(dimension->value());
+                minifyAngle(dimension);
 
-                        if (angle > 260.) {
-                            angle = 360. - angle;
+                if ((dimension->value("0") && removeUnnecessaryPercentages(params.begin()+1, params.end()) &&
+                     reverseColorStops(params.begin()+1, params.end())) ||
+                    (dimension->value("180") && dimension->unit("deg") &&
+                     removeUnnecessaryPercentages(params.begin()+1, params.end()))) {
+                    params.erase(params.begin());
+                }
+                else if (dimension->unit("deg")) {
+                    double angle = stod(dimension->value());
 
-                            if (reverseColorStops(params.begin()+1, params.end())) {
-                                dimension->setNumber(getShortNumber(to_string(angle)));
-                                dimension->setUnit("deg");
-                            }
+                    if (angle > 260.) {
+                        angle = 360. - angle;
+
+                        if (removeUnnecessaryPercentages(params.begin()+1, params.end()) &&
+                            reverseColorStops(params.begin()+1, params.end())) {
+                            dimension->setNumber(getShortNumber(to_string(angle)));
+                            dimension->setUnit("deg");
                         }
+                    } else {
+                        removeUnnecessaryPercentages(params.begin()+1, params.end());
                     }
                 }
-            }
-            else if (isColor(param1.front())) {
+            } else if (isColor(param1.front())) {
                 removeUnnecessaryPercentages(params.begin(), params.end());
             }
+        } else {
+            removeUnnecessaryPercentages(params.begin(), params.end());
         }
     }
 }
