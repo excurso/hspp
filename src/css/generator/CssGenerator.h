@@ -32,16 +32,16 @@ using namespace CSS::Parsing::Elements;
 using CssVisitorInterface =
     VisitorInterface<CssAtRulePtr, CssBlockPtr, CssDeclarationPtr, CssPercentagePtr,
                      CssDimensionPtr, CssFunctionPtr, CssIdentifierPtr, CssCustomPropertyPtr,
-                     CssNumberPtr, CssColorPtr, CssQualifiedRulePtr, CssStringPtr, CssSelectorPtr,
-                     CssSelectorAttributePtr, CssSelectorCombinatorPtr, CssDelimiterPtr,
-                     CssUnicodeRangePtr, CssSupportsConditionPtr, CssCommentPtr>;
+                     CssNumberPtr, CssColorPtr, CssQualifiedRulePtr, CssStringPtr,
+                     CssSelectorPtr, CssSelectorAttributePtr, CssSelectorCombinatorPtr,
+                     CssDelimiterPtr, CssUnicodeRangePtr, CssSupportsConditionPtr, CssCommentPtr>;
 
 class CssGenerator : public CssVisitorInterface
 {
 public:
     explicit
     CssGenerator(string &minified_content),
-	CssGenerator(const shared_ptr<string> &minified_content);
+    CssGenerator(shared_ptr<string> minified_content);
 
     using CssVisitorInterface::CssVisitorInterface;
 
@@ -66,9 +66,16 @@ public:
     visit(const CssSupportsConditionPtr &)    override,
     visit(const CssCommentPtr &)              override;
 
+    inline const string &
+    outputBuffer() const;
+
+    inline void
+    clearOutputBuffer();
+
 private:
     /// Reference to buffer for output content
-    string &m_output_buffer;
+    shared_ptr<string> m_output_buffer_ptr;
+    string &m_output_buffer {*m_output_buffer_ptr};
 
     enum Context {STYLESHEET, DECLARATION, SELECTOR_LIST, AT_RULE_EXPRESSION_LIST};
 
@@ -80,8 +87,12 @@ private:
     context(const Context context) const,
     context(const initializer_list<Context> candidates) const;
 
-    stack<Context> m_context_stack;
+    stack<Context> m_context_stack {{STYLESHEET}};
+
+    bool m_beautify {cfg.isEnabled(Config::GENERAL__BEAUTIFY_OUTPUT)};
 };
+
+static uint8_t s_indent_width = 0;
 
 inline void
 CssGenerator::
@@ -113,6 +124,20 @@ context(const initializer_list<Context> candidates) const
             return true;
 
     return false;
+}
+
+inline const string &
+CssGenerator::
+outputBuffer() const
+{
+    return m_output_buffer;
+}
+
+inline void
+CssGenerator::
+clearOutputBuffer()
+{
+    m_output_buffer.clear();
 }
 
 } // namespace Generation

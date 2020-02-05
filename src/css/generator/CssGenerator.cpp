@@ -21,10 +21,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 using namespace CSS::Generation;
 
 CssGenerator::CssGenerator(string &minified_content) :
-    m_output_buffer(minified_content), m_context_stack({STYLESHEET}) {}
+    m_output_buffer_ptr(make_shared<string>(minified_content)) {}
 
-CssGenerator::CssGenerator(const shared_ptr<string> &minified_content) :
-    m_output_buffer(*minified_content), m_context_stack({STYLESHEET}) {}
+CssGenerator::CssGenerator(shared_ptr<string> minified_content) :
+    m_output_buffer_ptr(move(minified_content)) {}
 
 void
 CssGenerator::
@@ -42,24 +42,44 @@ visit(const CssAtRulePtr &at_rule)
 
     if (at_rule->expressions()) {
         for (const auto &list : *at_rule->expressions()) {
-            for (const auto &element : list) {
-                if (m_output_buffer.back() != ',')
-                    m_output_buffer += ' ';
+            for (const auto &element : *list) {
+                if (m_beautify ||
+                    &element != &list->front() ||
+                    !element->isOfType(CssBaseElement::BLOCK))
+                        m_output_buffer += ' ';
 
                 element->accept(*this);
             }
 
-            if (&list != &at_rule->expressions()->back())
+            if (&list != &at_rule->expressions()->back()) {
                 m_output_buffer += ',';
+
+                if (m_beautify)
+                    m_output_buffer += "\n      ";
+            }
         }
     }
 
     popContext();
 
     if (at_rule->block()) {
+        if (m_beautify)
+            m_output_buffer += ' ';
+
         m_output_buffer += '{';
 
+        if (m_beautify) {
+            m_output_buffer += '\n';
+            if (at_rule->expressions()->size() > 1)
+                m_output_buffer += '\n';
+
+            ++s_indent_width;
+        }
+
         for (const auto &element : at_rule->block()->elements()) {
+            if (m_beautify)
+                m_output_buffer += String::repeatChar('\t', s_indent_width);
+
             element->accept(*this);
 
             if (!element->isQualifiedRule() &&
@@ -67,12 +87,27 @@ visit(const CssAtRulePtr &at_rule)
                 !element->isComment() &&
                 &element != &at_rule->block()->elements().back())
                 m_output_buffer += ';';
+
+            if (m_beautify && m_output_buffer.back() != '\n') {
+                m_output_buffer += '\n';
+            }
         }
+
+        if (m_beautify) {
+            --s_indent_width;
+            m_output_buffer += String::repeatChar('\t', s_indent_width);
+        }
+
+        if (m_output_buffer.back() == '\n' && *(m_output_buffer.end()-2) == '\n')
+            m_output_buffer.pop_back();
 
         m_output_buffer += '}';
     }
     else
         m_output_buffer += ';';
+
+    if (m_beautify)
+        m_output_buffer += "\n\n";
 }
 
 void
@@ -80,11 +115,21 @@ CssGenerator::
 visit(const CssBlockPtr &block)
 {
     if (block->blockType() == CssBlock::STYLESHEET)
-        m_output_buffer += OUTPUT_FILE_HEADER "\n";
+        if (!m_beautify)
+            m_output_buffer += OUTPUT_FILE_HEADER "\n";
 
     switch (block->blockType()) {
     case CssBlock::CURLY:
+        if (m_beautify)
+            m_output_buffer += ' ';
+
         m_output_buffer += '{';
+
+        if (m_beautify) {
+            m_output_buffer += '\n';
+            ++s_indent_width;
+        }
+
         break;
     case CssBlock::SQUARE:
         m_output_buffer += '[';
@@ -96,7 +141,10 @@ visit(const CssBlockPtr &block)
     }
 
     for (const auto &element : block->elements()) {
-        if (element->isIdentifier() && block->elements().size() != 1)
+        if (m_beautify)
+            m_output_buffer += String::repeatChar('\t', s_indent_width);
+
+        if (element->isIdentifier() && block->elements().size() != 1 && &element != &block->elements().front())
             m_output_buffer += ' ';
 
         element->accept(*this);
@@ -104,10 +152,15 @@ visit(const CssBlockPtr &block)
         if (&element != &block->elements().back() &&
             element->isDeclaration()) {
             m_output_buffer += ';';
+        }
 
-//#ifdef DEBUG
-//    m_output_buffer += NEWLINE;
-//#endif
+        if (m_beautify && block->blockType() == CssBlock::CURLY) {
+            m_output_buffer += '\n';
+
+            if (&element == &block->elements().back()) {
+                --s_indent_width;
+                m_output_buffer += String::repeatChar('\t', s_indent_width);
+            }
         }
 
         if (element->isIdentifier() && block->elements().size() != 1)
@@ -115,8 +168,17 @@ visit(const CssBlockPtr &block)
     }
 
     switch (block->blockType()) {
+    case CssBlock::STYLESHEET:
+        while (m_output_buffer.back() == '\n')
+            m_output_buffer.pop_back();
+
+        break;
     case CssBlock::CURLY:
         m_output_buffer += '}';
+
+        if (m_beautify)
+            m_output_buffer += "\n\n";
+
         break;
     case CssBlock::SQUARE:
         m_output_buffer += ']';
@@ -132,19 +194,13 @@ void
 CssGenerator::
 visit(const CssDeclarationPtr &declaration)
 {
-#ifdef DEBUG
-    if (declaration->name().empty())
-        cerr << "CssGenerator::visit(const CssDeclarationPtr &declaration):" NEWLINE
-             << "Empty property name" << endl;
-
-//    m_output_buffer += NEWLINE;
-#endif
-
     pushContext(DECLARATION);
 
     declaration->namePtr()->accept(*this);
 
     m_output_buffer += ':';
+
+    if (m_beautify) m_output_buffer += ' ';
 
     for (const auto &list : declaration->values()) {
         for (const auto &value : list) {
@@ -158,10 +214,13 @@ visit(const CssDeclarationPtr &declaration)
             m_output_buffer += ',';
     }
 
-    if (declaration->isImportant())
+    if (declaration->isImportant()) {
+        if (m_beautify) m_output_buffer += ' ';
         m_output_buffer += "!important";
-    else if (!declaration->importantReplacement().empty()) {
-        m_output_buffer += "!" + declaration->importantReplacement();
+    }
+    else if (!declaration->importantHack().empty()) {
+        if (m_beautify) m_output_buffer += ' ';
+        m_output_buffer += "!" + declaration->importantHack();
     }
 
     popContext();
@@ -264,6 +323,11 @@ void
 CssGenerator::
 visit(const CssCustomPropertyPtr &custom_property)
 {
+    if (custom_property->replacementElement()) {
+        custom_property->replacementElement()->accept(*this);
+        return;
+    }
+
     m_output_buffer += "--";
     m_output_buffer += custom_property->value();
 }
@@ -272,6 +336,11 @@ void
 CssGenerator::
 visit(const CssNumberPtr &number)
 {
+    if (number->replacementElement()) {
+        number->replacementElement()->accept(*this);
+        return;
+    }
+
     if (number->isNegative()) m_output_buffer += '-';
     m_output_buffer += number->value();
     m_output_buffer += number->scientificPostfix();
@@ -294,8 +363,14 @@ visit(const CssQualifiedRulePtr &qualified_rule)
     for (const auto &selector : qualified_rule->selectors()) {
         selector->accept(*this);
 
-        if (&selector != &qualified_rule->selectors().back())
+        if (&selector != &qualified_rule->selectors().back()) {
             m_output_buffer += ',';
+
+            if (m_beautify) {
+                m_output_buffer += '\n';
+                m_output_buffer += String::repeatChar('\t', s_indent_width);
+            }
+        }
     }
 
     popContext();
@@ -326,6 +401,11 @@ void
 CssGenerator::
 visit(const CssSelectorPtr &selector)
 {
+    if (selector->replacementElement()) {
+        selector->replacementElement()->accept(*this);
+        return;
+    }
+
     if (selector->parentalSelector())
         selector->parentalSelector()->accept(*this);
 
@@ -431,7 +511,19 @@ void
 CssGenerator::
 visit(const CssSelectorCombinatorPtr &selector_combinator)
 {
-    selector_combinator->left()->accept(*this);
+    if (selector_combinator->left()->isOfType(CssBaseElement::SELECTOR)) {
+        const auto &selector = CssSelector::fromBase(selector_combinator->left());
+
+        if (selector->selectorType() == CssSelector::UNIVERSAL)
+            m_output_buffer += '*';
+        else
+            selector_combinator->left()->accept(*this);
+    } else {
+        selector_combinator->left()->accept(*this);
+    }
+
+    if (m_beautify && selector_combinator->combinatorType() != CssSelectorCombinator::DESCENDANCY)
+        m_output_buffer += ' ';
 
     switch (selector_combinator->combinatorType()) {
     case CssSelectorCombinator::DESCENDANCY:
@@ -453,6 +545,18 @@ visit(const CssSelectorCombinatorPtr &selector_combinator)
         m_output_buffer += '~';
         break;
     default:;
+    }
+
+    if (m_beautify && selector_combinator->combinatorType() != CssSelectorCombinator::DESCENDANCY)
+        m_output_buffer += ' ';
+
+    if (selector_combinator->right()->isOfType(CssBaseElement::SELECTOR)) {
+        const auto &selector = CssSelector::fromBase(selector_combinator->right());
+
+        if (selector->selectorType() == CssSelector::UNIVERSAL) {
+            m_output_buffer += '*';
+            return;
+        }
     }
 
     selector_combinator->right()->accept(*this);
