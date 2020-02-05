@@ -179,29 +179,29 @@ void prepare(DataContainer<pair<const string, const string> > &args)
     }
 
     if (!cfg.isEnabled(Config::GENERAL__OUTPUT_TO_STDO) &&
-        cfg.isEnabled(Config::GENERAL__CREATE_PHP_INCLUDE_FILE)) {
-        const auto checkPhpVariableName = [&](const string &var) -> void {
+        cfg.isEnabled(Config::GENERAL__CREATE_JSON_FILE)) {
+        const auto checkJsonObjectName = [&](const string &var) -> void {
             if (var.empty()) {
                 string setting_name;
 
-                if (&var == &cfg.phpIdArrayName())
+                if (&var == &cfg.jsonIdObjectName())
                     setting_name = "php_id_array_name";
-                else if (&var == &cfg.phpClassArrayName())
+                else if (&var == &cfg.jsonClassObjectName())
                     setting_name = "php_class_array_name";
-                else if (&var == &cfg.phpCustomPropertyArrayName())
+                else if (&var == &cfg.jsonCustomPropertyObjectName())
                     setting_name = "php_cprop_array_name";
-                else if (&var == &cfg.phpAnimationArrayName())
+                else if (&var == &cfg.jsonAnimationObjectName())
                     setting_name = "php_animation_array_name";
 
-                RETURN("'create_php_include_file' is enabled, but '" + setting_name +
+                RETURN("'create_json_file' is enabled, but '" + setting_name +
                        "' value is empty." DBLNEWLINE "Check configuration file.");
             }
         };
 
-        checkPhpVariableName(cfg.phpIdArrayName());
-        checkPhpVariableName(cfg.phpClassArrayName());
-        checkPhpVariableName(cfg.phpCustomPropertyArrayName());
-        checkPhpVariableName(cfg.phpAnimationArrayName());
+        checkJsonObjectName(cfg.jsonIdObjectName());
+        checkJsonObjectName(cfg.jsonClassObjectName());
+        checkJsonObjectName(cfg.jsonCustomPropertyObjectName());
+        checkJsonObjectName(cfg.jsonAnimationObjectName());
     }
 
     if (isSet("--help")) {
