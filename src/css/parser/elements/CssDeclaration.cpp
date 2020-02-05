@@ -23,17 +23,14 @@ using namespace CSS::Parsing::Elements;
 CssDeclaration::CssDeclaration(const string &name) :
     CssBaseElement(DECLARATION),
     m_name(make_shared<CssIdentifier>(name)),
-    m_values({DataContainer<CssBaseElementPtr>()}),
-    m_important_flag(false) {}
+    m_values({DataContainer<CssBaseElementPtr>()}) {}
 
 CssDeclaration::CssDeclaration(const shared_ptr<string> &name) :
     CssBaseElement(DECLARATION),
     m_name(make_shared<CssIdentifier>(name)),
-    m_values({DataContainer<CssBaseElementPtr>()}),
-    m_important_flag(false) {}
+    m_values({DataContainer<CssBaseElementPtr>()}) {}
 
-CssDeclaration::CssDeclaration(const CssCustomPropertyPtr &name) :
+CssDeclaration::CssDeclaration(CssIdentifierPtr name) :
     CssBaseElement(DECLARATION),
-    m_name(name),
-    m_values({DataContainer<CssBaseElementPtr>()}),
-    m_important_flag(false) {}
+    m_name(move(name)),
+    m_values({DataContainer<CssBaseElementPtr>()}) {}

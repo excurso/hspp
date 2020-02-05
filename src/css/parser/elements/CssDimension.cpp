@@ -20,5 +20,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 #include "CssDimension.h"
 using namespace CSS::Parsing::Elements;
 
+CssDimension::CssDimension(CssNumber &number) noexcept :
+    CssNumber(DIMENSION, number.value()) {}
+
+CssDimension::CssDimension(CssNumber &&number) noexcept :
+    CssNumber(DIMENSION, number.value()) {}
+
 CssDimension::CssDimension(string number, string unit) :
     CssNumber(DIMENSION, move(number)), m_unit(move(unit)) {}

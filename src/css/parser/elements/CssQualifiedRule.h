@@ -38,7 +38,7 @@ public:
     accept(CssVisitorInterface &visitor) override,
 
     setSelectors(const DataContainer<CssBaseElementPtr> &selector_list),
-    appendSelector(const CssBaseElementPtr &selector_combinator),
+	appendSelector(const CssBaseElementPtr &selector),
     setBlock(const CssBaseElementPtr &block);
 
     inline DataContainer<CssBaseElementPtr> &
@@ -83,9 +83,9 @@ setSelectors(const DataContainer<CssBaseElementPtr> &selector_list)
 
 inline void
 CssQualifiedRule::
-appendSelector(const CssBaseElementPtr &selector_combinator)
+appendSelector(const CssBaseElementPtr &selector)
 {
-    m_selector_list.emplace_back(selector_combinator);
+	m_selector_list.emplace_back(selector);
 }
 
 inline DataContainer<CssBaseElementPtr> &

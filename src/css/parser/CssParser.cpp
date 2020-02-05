@@ -38,6 +38,7 @@ CssParser::parse()
     }
 
     tokenStream()->clear();
+
     return m_stylesheet;
 }
 
@@ -128,7 +129,7 @@ bool
 CssParser::
 parseBlock(CssBlock::BlockType block_type)
 {
-    const auto block = make_shared<CssBlock>(block_type);
+    auto block = make_shared<CssBlock>(block_type);
 
     if (parseDeclarationList()) {
         // Set AST elements
@@ -137,7 +138,7 @@ parseBlock(CssBlock::BlockType block_type)
         m_tmp_list.pop();
     }
     else if (block->blockType() == CssBlock::PAREN) {
-        if (parseValue()) {
+        while (parseValue() || parseParenBlock()) {
             block->appendElement(m_tmp_result_stack.top());
             m_tmp_result_stack.pop();
         }
@@ -180,7 +181,7 @@ parseParenBlock()
     if (currentToken()->isPunctuator('(') && lookAhead()) {
         if (currentToken()->isPunctuator('(')) {
             const auto paren_block = make_shared<CssBlock>(CssBlock::PAREN);
-            while (parseParenBlock() || parseValue()) {
+            while (parseValue() || parseParenBlock()) {
                 paren_block->appendElement(m_tmp_result_stack.top());
                 m_tmp_result_stack.pop();
             }
@@ -193,7 +194,7 @@ parseParenBlock()
             throwParseError("Missing ')'");
         }
         else
-            return (parseBlock(CssBlock::PAREN)) && currentToken()->isPunctuator(')') && lookAhead();
+            return parseBlock(CssBlock::PAREN) && currentToken()->isPunctuator(')') && lookAhead();
     }
 
     return false;
@@ -204,7 +205,7 @@ CssParser::
 parseQualifiedRule()
 {
     if (parseSelectorList() && currentToken()->isPunctuator('{')) {
-        // Create an object for the qualified rule and assign it the selector list
+        // Create an object for the qualified rule and assign the selector list to it
         const auto qualified_rule = make_shared<CssQualifiedRule>(m_tmp_list.top());
         // Remove the selector list from the top of the temporal list stack
         m_tmp_list.pop();
@@ -241,15 +242,13 @@ parseSelector()
             case '.':
                 if (!nextToken()->isIdentifier() && advance()) throwParseError("Invalid class name");
                 advance();
-                current_selector = make_shared<CssSelector>(CssSelector::CLASS, parental_selector, currentToken()->content());
+                current_selector = make_shared<CssSelector>(CssSelector::CLASS, currentToken()->content());
                 current_selector->setInitialPosition(currentToken()->row(), currentToken()->column() - 1);
                 advance();
                 break;
             case ':':
                 if (parsePseudoClass() || parsePseudoElement()) {
                     current_selector = CssSelector::fromBase(m_tmp_result_stack.top());
-                    current_selector->setParentalSelector(parental_selector);
-                    parental_selector->setChildSelector(current_selector);
                     m_tmp_result_stack.pop();
                 } else {
                     advance(); throwParseError("");
@@ -269,7 +268,7 @@ parseSelector()
             break;
         case CssToken::HASH_LITERAL:
             if (currentToken()->content().empty()) throwParseError("Invalid id");
-            current_selector = make_shared<CssSelector>(CssSelector::ID, parental_selector, currentToken()->content());
+            current_selector = make_shared<CssSelector>(CssSelector::ID, currentToken()->content());
             current_selector->setInitialPosition(currentToken()->row(), currentToken()->column());
             advance();
             break;
@@ -305,8 +304,6 @@ parseSelectorCombination()
 {
     CssBaseElementPtr left, right;
     CssSelectorCombinatorPtr combinator;
-
-    const auto start = getIterator();
 
     while (true) {
         if (combinator && left && right) {
@@ -360,13 +357,11 @@ parseSelectorList()
     m_tmp_list.emplace(DataContainer<CssBaseElementPtr>());
 
     do {
-        currentToken()->isWhiteSpace() && lookAhead();
-
         if (parseSelectorCombination()) {
             m_tmp_list.top().emplace_back(m_tmp_result_stack.top());
             m_tmp_result_stack.pop();
         }
-    } while (currentToken()->isPunctuator(',') && advance());
+    } while (currentToken()->isPunctuator(',') && lookAhead());
 
     if (m_tmp_list.top().empty()) {
         m_tmp_list.pop();
@@ -425,7 +420,7 @@ parseAttributeSelector()
             throwParseError("");
 
         if (currentToken()->isIdentifier("i") && prevToken()->isWhiteSpace()) {
-            attribute_selector->setCaseInsensitive();
+            attribute_selector->setCaseInsensitiveFlag();
             lookAhead();
         }
 
@@ -627,15 +622,32 @@ parseAtRuleCharset()
     for (const auto &vendor_prefix : m_vendor.prefixes) {
         const auto at_keyword_charset = vendor_prefix + "charset";
         if (currentToken()->isAtKeyword(at_keyword_charset) && lookAhead()) {
+            if (!m_stylesheet->elements().empty()) {
+                lookBehind();
+
+                cout << "[Note] Unexpected token @" << at_keyword_charset
+                     << " at row " << currentToken()->row() << " column " << currentToken()->column()
+                     << NEWLINE
+                     << "[Note] @" << at_keyword_charset << " rule has to be at the beginning of the document"
+                     << NEWLINE
+                     << "[Note] Skipping rule @" + at_keyword_charset
+                     << NEWLINE;
+
+                lookAhead();
+            }
+
             if (currentToken()->isStringLiteral()) {
-                const auto at_rule_charset = make_shared<CssAtRule>(at_keyword_charset);
-                const auto css_string = make_shared<CssString>(currentToken()->content());
+                if (m_stylesheet->elements().empty()) {
+                    const auto at_rule_charset = make_shared<CssAtRule>(at_keyword_charset);
+                    const auto css_string = make_shared<CssString>(currentToken()->content());
 
-                at_rule_charset->appendExpression(css_string);
+                    at_rule_charset->appendExpression(css_string);
+                    m_tmp_result_stack.emplace(at_rule_charset);
+
+                    return lookAhead() && currentToken()->isPunctuator(';') && lookAhead();
+                }
+
                 lookAhead() && currentToken()->isPunctuator(';') && lookAhead();
-                m_tmp_result_stack.emplace(at_rule_charset);
-
-                return true;
             }
         }
     }
@@ -696,12 +708,11 @@ parseAtRuleImport()
                 at_rule_import->appendExpression(m_tmp_result_stack.top());
                 m_tmp_result_stack.pop();
 
-                if (currentToken()->isPunctuator(',')) {
-                    at_rule_import->createList(); lookAhead();
-                }
+                if (currentToken()->isPunctuator(',') && lookAhead())
+                    at_rule_import->createList();
             }
 
-            if (!at_rule_import->expressions()->front().empty()) {
+            if (!at_rule_import->expressions()->front()->empty()) {
                 currentToken()->isPunctuator(';') && lookAhead();
                 m_tmp_result_stack.emplace(at_rule_import);
                 return true;
@@ -775,7 +786,6 @@ parseAtRuleMedia()
         const auto at_keyword_media = vendor_prefix + "media";
 
         if (currentToken()->isAtKeyword(at_keyword_media) && lookAhead()) {
-            const auto expression_start = getIterator();
             const auto at_rule_media = make_shared<CssAtRule>(at_keyword_media);
             const auto at_rule_block = make_shared<CssBlock>(CssBlock::CURLY);
 
@@ -787,48 +797,15 @@ parseAtRuleMedia()
                     at_rule_media->createList();
             }
 
-            if (currentToken()->isPunctuator('{')) {
-                const auto expression_end = prevToken()->isWhiteSpace() ? getIterator()-2 : getIterator()-1;
-                lookAhead();
-
+            if (currentToken()->isPunctuator('{') && lookAhead()) {
                 while (parseQualifiedRule() || parseAtRule() || parseComment()) {
                     at_rule_block->appendElement(m_tmp_result_stack.top());
                     m_tmp_result_stack.pop();
                 }
 
                 if (currentToken()->isPunctuator('}') && lookAhead()) {
-                    const auto media_rule_end = getIterator();
-
                     at_rule_media->setBlock(at_rule_block);
                     m_tmp_result_stack.emplace(at_rule_media);
-
-                    // ### Let same media rule exressions point to unique memory location
-                    string key;
-                    setIterator(expression_start);
-
-                    // Build key for hash table
-                    do {
-                        if (currentToken()->isWhiteSpace()) {
-                            if (nextToken()->isPunctuator(':') || prevToken()->isPunctuator(':'))
-                                continue;
-
-                            key += ' ';
-                        }
-                        else
-                            key += currentToken()->content();
-                    } while (getIterator() != expression_end && advance());
-
-                    const auto found = m_media_rules.find(key);
-
-                    if (found != m_media_rules.end()) {
-                        at_rule_media->setExpressions(found->second->expressions());
-                    } else {
-                        m_media_rules.emplace(key, at_rule_media);
-                    }
-                    // ###
-
-                    setIterator(media_rule_end);
-
                     return true;
                 }
 
@@ -941,9 +918,8 @@ parseAtRuleCounterStyle()
                     at_rule_counter_style->appendExpression(m_tmp_result_stack.top());
                     m_tmp_result_stack.pop();
 
-                    if (currentToken()->isPunctuator(',')) {
-                        at_rule_counter_style->createList(); lookAhead();
-                    }
+                    if (currentToken()->isPunctuator(',') && lookAhead())
+                        at_rule_counter_style->createList();
                 }
 
                 if (currentToken()->isPunctuator('{') && lookAhead()) {
@@ -981,6 +957,7 @@ parseAtRuleKeyframes()
 
             if (parseValue()) {
                 at_rule_keyframes->appendExpression(m_tmp_result_stack.top());
+
                 m_tmp_result_stack.pop();
 
                 if (currentToken()->isPunctuator('{') && lookAhead()) {
@@ -1053,22 +1030,27 @@ bool
 CssParser::
 parseDeclaration()
 {
-    rememberPosition();
+    if (currentToken()->isIdentifier() || currentToken()->isPunctuator('*')) {
+        rememberPosition();
 
-    // IE <= 7 hack
-    auto ie_hack = false;
-
-    if (currentToken()->isPunctuator('*') && lookAhead())
-        ie_hack = true;
-
-    if (currentToken()->isIdentifier()) {
         CssDeclarationPtr declaration;
 
-        if (currentToken()->content().substr(0, 2) == "--") {
-            const auto custom_property = make_shared<CssCustomProperty>(currentToken()->content().substr(2));
+        if (currentToken()->isIdentifier() && currentToken()->content().substr(0, 2) == "--") {
+            const auto custom_property_name = currentToken()->content().substr(2);
+            const auto custom_property = make_shared<CssCustomProperty>(custom_property_name);
+
             declaration = make_shared<CssDeclaration>(custom_property);
-        } else
-            declaration = make_shared<CssDeclaration>((ie_hack ? "*" : "") + currentToken()->content());
+        } else {
+            // IE <= 7 hack
+            auto ie_hack = false;
+
+            if (currentToken()->isPunctuator('*') && lookAhead())
+                ie_hack = true;
+
+            const auto property_name = (ie_hack ? "*" : "") + currentToken()->content();
+
+            declaration = make_shared<CssDeclaration>(property_name);
+        }
 
         lookAhead();
 
@@ -1105,11 +1087,20 @@ parseDeclaration()
                             if (currentToken()->isHashLiteral())
                                 content += '#';
 
+                            if (currentToken()->isStringLiteral()) {
+                                content += '"';
+                                content += currentToken()->content();
+                                content += '"';
+                                advance();
+                                continue;
+                            }
+
                             content += currentToken()->content(); advance();
                         }
 
                         const auto css_string = make_shared<CssString>(content, true);
-                        declaration->values()[0][0]->setReplacementElement(css_string);
+                        declaration->values()[0].clear();
+                        declaration->values()[0].emplace_back(css_string);
                     }
                 }
             }
@@ -1118,7 +1109,7 @@ parseDeclaration()
                 if (currentToken()->isIdentifier("important") && lookAhead())
                     declaration->setImportantFlag();
                 else if (currentToken()->isIdentifier()) {
-                    declaration->setImportantReplacement(currentToken()->content());
+                    declaration->setImportantHack(currentToken()->content());
                     lookAhead();
                 } else throwParseError("");
             }
@@ -1128,9 +1119,9 @@ parseDeclaration()
             popPosition();
             return true;
         }
-    }
 
-    resetPosition();
+        resetPosition();
+    }
 
     return false;
 }
@@ -1233,7 +1224,8 @@ parseValue()
         if (parseFunction()) return true;
 
         if (currentToken()->content().substr(0, 2) == "--") {
-            const auto custom_property = make_shared<CssCustomProperty>(currentToken()->content().substr(2));
+            const auto custom_property_name = currentToken()->content().substr(2);
+            const auto custom_property = make_shared<CssCustomProperty>(custom_property_name);
             custom_property->setInitialPosition(currentToken()->row(), currentToken()->column());
             m_tmp_result_stack.emplace(custom_property);
             lookAhead();
@@ -1241,14 +1233,17 @@ parseValue()
         }
 
         if (currentToken()->content() == "transparent" || isPredefinedColor(currentToken()->content())) {
-            const auto color = make_shared<CssColor>(CssColor::PREDEFINED_NAME, currentToken()->content());
+            auto color = make_shared<CssColor>(CssColor::PREDEFINED_NAME, currentToken()->content());
             color->setInitialPosition(currentToken()->row(), currentToken()->column());
+
             m_tmp_result_stack.emplace(color);
+
             lookAhead();
             return true;
         }
 
         const auto identifier = make_shared<CssIdentifier>(currentToken()->content());
+
         identifier->setInitialPosition(currentToken()->row(), currentToken()->column());
         m_tmp_result_stack.emplace(identifier);
         lookAhead();
@@ -1270,6 +1265,7 @@ parseValue()
         const auto hex_color = make_shared<CssColor>(CssColor::HEX_LITERAL, String::toLower(currentToken()->content()));
         hex_color->setInitialPosition(currentToken()->row(), currentToken()->column());
         m_tmp_result_stack.emplace(hex_color);
+
         lookAhead();
         return true;
     }
@@ -1312,7 +1308,9 @@ parseNumber()
     }
 
     if (currentToken()->isNumericLiteral()) {
-        const auto row = currentToken()->row(), column = currentToken()->column();
+        const auto
+        row = currentToken()->row(),
+        column = currentToken()->column();
 
         const auto number_element = make_shared<CssNumber>(currentToken()->content());
         number_element->setInitialPosition(row, column);
@@ -1325,20 +1323,24 @@ parseNumber()
         }
 
         if (currentToken()->isUnit()) {
-            const auto dimension_element = make_shared<CssDimension>(number_element->value(), currentToken()->content());
+            auto dimension_element = make_shared<CssDimension>(move(*number_element));
+            dimension_element->setUnit(currentToken()->content());
             dimension_element->setNegativeFlag(negative_number);
             dimension_element->setInitialPosition(row, column);
+
             m_tmp_result_stack.emplace(dimension_element);
+
             lookAhead();
         }
         else if (currentToken()->isPunctuator('%')) {
-            const auto percentage_element = make_shared<CssPercentage>(number_element->value());
+            auto percentage_element = make_shared<CssPercentage>(move(*number_element));
             percentage_element->setNegativeFlag(negative_number);
             percentage_element->setInitialPosition(row, column);
+
             m_tmp_result_stack.emplace(percentage_element);
+
             lookAhead();
-        }
-        else {
+        } else {
             m_tmp_result_stack.emplace(number_element);
         }
 

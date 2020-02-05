@@ -32,15 +32,16 @@ public:
     explicit
 	CssDeclaration(const string &name),
     CssDeclaration(const shared_ptr<string> &name),
-    CssDeclaration(const CssCustomPropertyPtr &name);
+    CssDeclaration(CssIdentifierPtr name);
 
     inline void
     accept(CssVisitorInterface &visitor) override,
 
     setName(const string &name),
     setName(const shared_ptr<string> &name),
+    setName(const CssIdentifierPtr &name),
     appendValue(const CssBaseElementPtr &value),
-    setImportantReplacement(const string &important_replacement),
+    setImportantHack(const string &important_hack),
     createList(),
     setImportantFlag();
 
@@ -51,20 +52,21 @@ public:
     namePtr();
 
     inline const string
-    &importantReplacement() const;
+    &importantHack() const;
 
     inline DataContainer<DataContainer<CssBaseElementPtr> > &
     values();
 
     inline bool
+    name(initializer_list<string> candidates) const,
     isImportant() const;
 
 private:
     // For IE hacks
-    string m_important_replacement;
-    DataContainer<DataContainer<CssBaseElementPtr> > m_values;
-    CssIdentifierPtr m_name;
-    bool m_important_flag;
+    string m_important_hack;
+	CssIdentifierPtr m_name;
+	DataContainer<DataContainer<CssBaseElementPtr> > m_values;
+    bool m_important_flag {false};
 };
 
 inline void
@@ -88,11 +90,24 @@ setName(const shared_ptr<string> &name)
     m_name->setValue(name);
 }
 
+inline void
+CssDeclaration::
+setName(const CssIdentifierPtr &name) {
+    m_name = name;
+}
+
 inline const string &
 CssDeclaration::
 name() const
 {
     return m_name->value();
+}
+
+inline bool
+CssDeclaration::
+name(const initializer_list<string> candidates) const
+{
+    return m_name->value(candidates);
 }
 
 inline const CssIdentifierPtr &
@@ -139,16 +154,16 @@ isImportant() const
 
 inline void
 CssDeclaration::
-setImportantReplacement(const string &important_replacement)
+setImportantHack(const string &important_hack)
 {
-    m_important_replacement = important_replacement;
+    m_important_hack = important_hack;
 }
 
 inline const string &
 CssDeclaration::
-importantReplacement() const
+importantHack() const
 {
-    return m_important_replacement;
+    return m_important_hack;
 }
 
 using CssDeclarationPtr = shared_ptr<CssDeclaration>;

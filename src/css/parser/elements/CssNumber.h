@@ -28,12 +28,8 @@ namespace Elements {
 class CssNumber : public CssBaseElement
 {
 public:
-    using CssBaseElement::CssBaseElement;
-
     explicit
-    CssNumber(string value),
-    CssNumber(const ElementType type, string value),
-    CssNumber(const ElementType type, const shared_ptr<CssNumber> &number);
+    CssNumber(string value);
 
     inline void
     accept(CssVisitorInterface &visitor) override,
@@ -52,6 +48,11 @@ public:
 	inline bool
     value(const string &value) const,
     value(const initializer_list<string> candidates) const;
+
+protected:
+    explicit
+    CssNumber(const ElementType type, string value),
+    CssNumber(const ElementType type, const shared_ptr<CssNumber> &number);
 
 private:
     bool m_is_negative {false};

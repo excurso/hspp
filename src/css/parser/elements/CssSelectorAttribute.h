@@ -8,9 +8,9 @@ namespace Elements {
 
 class CssSelectorAttribute final : public CssSelector
 {
+public:
     using CssSelectorAttributePtr = shared_ptr<CssSelectorAttribute>;
 
-public:
     enum Operation : uint8_t {
         NONE, EQUAL, ROOF_EQUAL, DOLLAR_EQUAL,
         PIPE_EQUAL, TILDE_EQUAL, ASTERISK_EQUAL
@@ -18,11 +18,9 @@ public:
 
     explicit
     CssSelectorAttribute(),
-    CssSelectorAttribute(string name,
-                         string value,
-                         const Operation operation,
-                         CssSelectorPtr parental_selector,
-                         const bool case_insensitive = false);
+    CssSelectorAttribute(
+        string name, string value, const Operation operation,
+        CssSelectorPtr parental_selector, const bool case_insensitive = false);
 
     static inline CssSelectorAttributePtr
     /// Cast CssSelectorPtr to CssSelectorAttributePtr
@@ -35,17 +33,11 @@ public:
     setAttributeValue(const string &value),
     setAttributeValue(const shared_ptr<string> &value),
     setOperation(const Operation operation),
-    setParentalSelector(const CssSelectorPtr &parental_selector),
-    setChildSelector(const CssSelectorPtr &child_selector),
-    setCaseInsensitive(const bool case_insensitive = true);
+    setCaseInsensitiveFlag(const bool case_insensitive = true);
 
     inline const string
     &attributeName() const,
     &attributeValue() const;
-
-    inline const CssSelectorPtr
-    &parentalSelector() const,
-    &childSelector() const;
 
     inline Operation
     operation() const;
@@ -61,7 +53,7 @@ private:
     bool m_case_insensitive_operation {false};
 };
 
-using CssSelectorAttributePtr = shared_ptr<CssSelectorAttribute>;
+using CssSelectorAttributePtr = CssSelectorAttribute::CssSelectorAttributePtr;
 
 inline void
 CssSelectorAttribute::
@@ -147,35 +139,7 @@ operation() const -> Operation
 
 inline void
 CssSelectorAttribute::
-setParentalSelector(const CssSelectorPtr &parental_selector)
-{
-    m_parental_selector = parental_selector;
-}
-
-inline const CssSelectorPtr &
-CssSelectorAttribute::
-parentalSelector() const
-{
-    return m_parental_selector;
-}
-
-inline void
-CssSelectorAttribute::
-setChildSelector(const CssSelectorPtr &child_selector)
-{
-    m_child_selector = child_selector;
-}
-
-inline const CssSelectorPtr &
-CssSelectorAttribute::
-childSelector() const
-{
-    return m_child_selector;
-}
-
-inline void
-CssSelectorAttribute::
-setCaseInsensitive(const bool case_insensitive)
+setCaseInsensitiveFlag(const bool case_insensitive)
 {
     m_case_insensitive_operation = case_insensitive;
 }

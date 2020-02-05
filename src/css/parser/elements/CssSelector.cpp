@@ -24,22 +24,17 @@ CssSelector::
 CssSelector(const SelectorType selector_type) :
     CssBaseElement(SELECTOR),
     m_selector_type(selector_type),
-    m_name(new string),
-    m_parental_selector(nullptr),
-    m_child_selector(nullptr) {}
+    m_name(new string) {}
 
 CssSelector::
 CssSelector(const SelectorType selector_type, string name) :
     CssBaseElement(SELECTOR),
     m_selector_type(selector_type),
-    m_name(new string(move(name))),
-    m_parental_selector(nullptr),
-    m_child_selector(nullptr) {}
+    m_name(new string(move(name))) {}
 
 CssSelector::
 CssSelector(const SelectorType selector_type, CssSelectorPtr parental_selector, string name) :
     CssBaseElement(SELECTOR),
     m_selector_type(selector_type),
     m_name(new string(move(name))),
-    m_parental_selector(move(parental_selector)),
-    m_child_selector(nullptr) {}
+    m_parental_selector(move(parental_selector)) {}

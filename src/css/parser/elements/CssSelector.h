@@ -142,6 +142,7 @@ inline void
 CssSelector::
 setName(const shared_ptr<string> &name)
 {
+    m_name->reserve(name->length());
     m_name = name;
 }
 

@@ -37,37 +37,41 @@ using CssBaseElementPtr = shared_ptr<CssBaseElement>;
 class CssAtRule; class CssBlock; class CssDeclaration;
 class CssDimension; class CssFunction; class CssIdentifier;
 class CssNumber; class CssColor; class CssQualifiedRule; class CssString;
-class CssSelector; class CssSelectorAttribute; class CssSelectorCombinator; class CssDelimiter;
-class CssUnicodeRange; class CssSupportsCondition; class CssComment; class CssPercentage;
+class CssSelector; class CssSelectorAttribute;
+class CssSelectorCombinator; class CssDelimiter; class CssUnicodeRange;
+class CssSupportsCondition; class CssComment; class CssPercentage;
 class CssCustomProperty;
 
 using CssVisitorInterface =
     VisitorInterface<shared_ptr<CssAtRule>, shared_ptr<CssBlock>, shared_ptr<CssDeclaration>,
                      shared_ptr<CssPercentage>, shared_ptr<CssDimension>, shared_ptr<CssFunction>,
-                     shared_ptr<CssIdentifier>, shared_ptr<CssCustomProperty>, shared_ptr<CssNumber>,
-                     shared_ptr<CssColor>, shared_ptr<CssQualifiedRule>, shared_ptr<CssString>,
-                     shared_ptr<CssSelector>, shared_ptr<CssSelectorAttribute>,
-                     shared_ptr<CssSelectorCombinator>, shared_ptr<CssDelimiter>,
-                     shared_ptr<CssUnicodeRange>, shared_ptr<CssSupportsCondition>,
-                     shared_ptr<CssComment> >;
+                     shared_ptr<CssIdentifier>, shared_ptr<CssCustomProperty>,
+                     shared_ptr<CssNumber>, shared_ptr<CssColor>, shared_ptr<CssQualifiedRule>,
+                     shared_ptr<CssString>, shared_ptr<CssSelector>, shared_ptr<CssSelectorAttribute>,
+                     shared_ptr<CssSelectorCombinator>, shared_ptr<CssDelimiter>, shared_ptr<CssUnicodeRange>,
+                     shared_ptr<CssSupportsCondition>, shared_ptr<CssComment> >;
 
 class CssBaseElement : public enable_shared_from_this<CssBaseElement>
 {
 public:
     enum ElementType : uint8_t {
-        SELECTOR, SELECTOR_COMBINATOR, BLOCK, IDENTIFIER, COLOR,
-        NUMBER, STRING, AT_RULE, QUALIFIED_RULE, SUPPORTS_CONDITION,
-        DECLARATION, FUNCTION, PERCENTAGE, DIMENSION, DELIMITER, COMMENT,
-        UNICODE_RANGE, CUSTOM_PROPERTY
+        SELECTOR, SELECTOR_COMBINATOR, BLOCK, IDENTIFIER, COLOR, NUMBER,
+        STRING, AT_RULE, QUALIFIED_RULE, SUPPORTS_CONDITION, DECLARATION,
+        FUNCTION, PERCENTAGE, DIMENSION, DELIMITER, COMMENT, UNICODE_RANGE,
+        CUSTOM_PROPERTY
     };
 
     constexpr explicit
     CssBaseElement(const ElementType type);
 
     CssBaseElement(const CssBaseElement &) = delete;
+    CssBaseElement(const CssBaseElement &&) = delete;
+    CssBaseElement(CssBaseElement &) = delete;
     CssBaseElement(CssBaseElement &&) = delete;
 
     CssBaseElement &operator=(const CssBaseElement &) = delete;
+    CssBaseElement &operator=(const CssBaseElement &&) = delete;
+    CssBaseElement &operator=(CssBaseElement &) = delete;
     CssBaseElement &operator=(CssBaseElement &&) = delete;
 
     inline virtual void
@@ -101,6 +105,7 @@ public:
     isDelimiter(),
     isFunction(),
     isIdentifier(),
+    isCustomProperty(),
     isAtRule(),
     isQualifiedRule(),
     isDeclaration();
@@ -217,6 +222,13 @@ CssBaseElement::
 isIdentifier()
 {
     return m_type == IDENTIFIER;
+}
+
+inline bool
+CssBaseElement::
+isCustomProperty()
+{
+    return m_type == CUSTOM_PROPERTY;
 }
 
 inline bool

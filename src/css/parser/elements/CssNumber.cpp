@@ -24,7 +24,7 @@ CssNumber::CssNumber(string value) :
     CssBaseElement(NUMBER),
     m_value(move(value)) {}
 
-// These ctors are for derived classes
+// The following ctors are for derived classes
 CssNumber::CssNumber(const ElementType type, string value) :
     CssBaseElement(type),
     m_value(move(value)) {}

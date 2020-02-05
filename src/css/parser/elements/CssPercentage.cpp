@@ -20,5 +20,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 #include "CssPercentage.h"
 using namespace CSS::Parsing::Elements;
 
+CssPercentage::CssPercentage(CssNumber &number) noexcept :
+    CssNumber(PERCENTAGE, number.value()) {}
+
+CssPercentage::CssPercentage(CssNumber &&number) noexcept :
+    CssNumber(PERCENTAGE, number.value()) {}
+
 CssPercentage::CssPercentage(string number) :
     CssNumber(PERCENTAGE, move(number)) {}

@@ -29,6 +29,8 @@ class CssPercentage final : public CssNumber
 {
 public:
 	explicit
+	CssPercentage(CssNumber &number) noexcept,
+	CssPercentage(CssNumber &&number) noexcept,
     CssPercentage(string number);
 
 	inline void

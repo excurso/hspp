@@ -29,6 +29,8 @@ class CssDimension final : public CssNumber
 {
 public:
     explicit
+	CssDimension(CssNumber &number) noexcept,
+	CssDimension(CssNumber &&number) noexcept,
     CssDimension(string number, string unit);
 
     inline void
