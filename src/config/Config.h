@@ -36,7 +36,8 @@ public:
         // bool settings
         GENERAL__OUTPUT_TO_STDO                     ,
         GENERAL__USE_UTF8_BOM                       ,
-        GENERAL__CREATE_PHP_INCLUDE_FILE            ,
+        GENERAL__CREATE_JSON_FILE                   ,
+        GENERAL__BEAUTIFY_OUTPUT                    ,
         CSS__INCLUDE_EXTERNAL_STYLESHEETS           ,
         CSS__REMOVE_COMMENTS                        ,
         CSS__MINIFY_NUMBERS                         ,
@@ -78,18 +79,18 @@ public:
     setConfigFilePath(const string &config_file_path),
     setInputPath(const string &path),
     setOutputPath(const string &path),
-    setPhpIdArrayName(const string &name),
-    setPhpClassArrayName(const string &name),
-    setPhpCustomPropertyArrayName(const string &name),
-    setPhpAnimationArrayName(const string &name),
+    setJsonIdObjectName(const string &name),
+    setJsonClassObjectName(const string &name),
+    setJsonCustomPropertyObjectName(const string &name),
+    setJsonAnimationObjectName(const string &name),
     setTabWidth(const uint8_t tab_width),
     enable(const Setting setting),
-    enable(const initializer_list<const Setting> settings),
     disable(const Setting setting),
-    disable(const initializer_list<const Setting> settings);
+    setUsingPipingFlag();
 
     inline bool
-    isEnabled(const uint32_t setting) const;
+    isEnabled(const uint32_t setting) const,
+    usingPiping() const;
 
     inline uint32_t
     boolSettings() const;
@@ -104,10 +105,10 @@ public:
     &outputWorkingDirectory() const,
     &inputPath() const,
     &outputPath() const,
-    &phpIdArrayName() const,
-    &phpClassArrayName() const,
-    &phpCustomPropertyArrayName() const,
-    &phpAnimationArrayName() const;
+    &jsonIdObjectName() const,
+    &jsonClassObjectName() const,
+    &jsonCustomPropertyObjectName() const,
+    &jsonAnimationObjectName() const;
 
     inline uint8_t
     tabWidth() const;
@@ -116,6 +117,16 @@ public:
     isRead() const;
 
 private:
+    enum ConfigSetting : uint8_t {
+        NONE, CONFIG_IS_READ, USING_PIPING
+    };
+
+    inline void
+    set(uint32_t &setting_var, uint32_t setting);
+
+    inline bool
+    isSet(uint32_t setting_var, const uint32_t setting) const;
+
     inline void
     setListSetting(const Setting setting, const DataContainer<string> &value_list),
     setStringSetting(const Setting setting, const string &value),
@@ -163,7 +174,8 @@ private:
             }),
             bool_settings({
                 { "general_use_utf8_bom",                   Config::GENERAL__USE_UTF8_BOM },
-                { "general_create_php_include_file",        Config::GENERAL__CREATE_PHP_INCLUDE_FILE },
+                { "general_create_json_file",               Config::GENERAL__CREATE_JSON_FILE },
+                { "general_beautify_output",                Config::GENERAL__BEAUTIFY_OUTPUT },
 
                 { "css_include_external_stylesheets",       Config::CSS__INCLUDE_EXTERNAL_STYLESHEETS },
                 { "css_remove_comments",                    Config::CSS__REMOVE_COMMENTS },
@@ -184,10 +196,10 @@ private:
                 { "general_output_working_directory",       Config::GENERAL__OUTPUT_WORKING_DIRECTORY },
                 { "general_input_path",                     Config::GENERAL__INPUT_PATH },
                 { "general_output_path",                    Config::GENERAL__OUTPUT_PATH },
-                { "general_php_id_array_name",              Config::GENERAL__PHP_ID_ARRAY_NAME },
-                { "general_php_class_array_name",           Config::GENERAL__PHP_CLASS_ARRAY_NAME },
-                { "general_php_cprop_array_name",           Config::GENERAL__PHP_CUSTOM_PROPERTY_ARRAY_NAME },
-                { "general_php_animation_array_name",       Config::GENERAL__PHP_ANIMATION_ARRAY_NAME }
+                { "general_json_id_object_name",            Config::GENERAL__PHP_ID_ARRAY_NAME },
+                { "general_json_class_object_name",         Config::GENERAL__PHP_CLASS_ARRAY_NAME },
+                { "general_json_cprop_object_name",         Config::GENERAL__PHP_CUSTOM_PROPERTY_ARRAY_NAME },
+                { "general_json_animation_object_name",     Config::GENERAL__PHP_ANIMATION_ARRAY_NAME }
             }),
             list_settings({
                 { "general_css_file_extensions",            Config::GENERAL__CSS_FILE_EXTENSIONS },
@@ -209,8 +221,7 @@ private:
     // Contains the path to config file
     string m_config_file {CONFIG_FILE_PATH};
 
-    // If configuration file has already been read...
-    bool m_config_is_read;
+    uint32_t m_config_settings {0};
 } extern cfg;
 
 inline void
@@ -224,14 +235,14 @@ inline void
 Config::
 setIsRead(const bool is_read)
 {
-    m_config_is_read = is_read;
+    set(m_config_settings, ConfigSetting::CONFIG_IS_READ);
 }
 
 inline bool
 Config::
 isRead() const
 {
-    return m_config_is_read;
+    return isSet(m_config_settings, ConfigSetting::CONFIG_IS_READ);
 }
 
 inline const DataContainer<string>
@@ -299,56 +310,56 @@ outputPath() const
 
 inline void
 Config::
-setPhpIdArrayName(const string &name)
+setJsonIdObjectName(const string &name)
 {
     setStringSetting(GENERAL__PHP_ID_ARRAY_NAME, name);
 }
 
 inline const string &
 Config::
-phpIdArrayName() const
+jsonIdObjectName() const
 {
     return m_string_settings.find(GENERAL__PHP_ID_ARRAY_NAME)->second;
 }
 
 inline void
 Config::
-setPhpClassArrayName(const string &name)
+setJsonClassObjectName(const string &name)
 {
     setStringSetting(GENERAL__PHP_CLASS_ARRAY_NAME, name);
 }
 
 inline const string &
 Config::
-phpClassArrayName() const
+jsonClassObjectName() const
 {
     return m_string_settings.find(GENERAL__PHP_CLASS_ARRAY_NAME)->second;
 }
 
 inline void
 Config::
-setPhpCustomPropertyArrayName(const string &name)
+setJsonCustomPropertyObjectName(const string &name)
 {
     setStringSetting(GENERAL__PHP_CUSTOM_PROPERTY_ARRAY_NAME, name);
 }
 
 inline const string &
 Config::
-phpCustomPropertyArrayName() const
+jsonCustomPropertyObjectName() const
 {
     return m_string_settings.find(GENERAL__PHP_CUSTOM_PROPERTY_ARRAY_NAME)->second;
 }
 
 inline void
 Config::
-setPhpAnimationArrayName(const string &name)
+setJsonAnimationObjectName(const string &name)
 {
     setStringSetting(GENERAL__PHP_ANIMATION_ARRAY_NAME, name);
 }
 
 inline const string &
 Config::
-phpAnimationArrayName() const
+jsonAnimationObjectName() const
 {
     return m_string_settings.find(GENERAL__PHP_ANIMATION_ARRAY_NAME)->second;
 }
@@ -367,13 +378,41 @@ tabWidth() const
     return m_numeric_settings.find(GENERAL__TAB_WIDTH)->second;
 }
 
+inline void
+Config::
+setUsingPipingFlag()
+{
+    set(m_config_settings, ConfigSetting::USING_PIPING);
+}
+
+inline bool
+Config::
+usingPiping() const
+{
+    return isSet(m_config_settings, ConfigSetting::USING_PIPING);
+}
+
+inline void
+Config::
+set(uint32_t &setting_var, uint32_t setting)
+{
+    setting_var |= (1U << (setting - 1U));
+}
+
+inline bool
+Config::
+isSet(uint32_t setting_var, const uint32_t setting) const
+{
+    const auto pos = static_cast<uint32_t>(1U << (setting - 1U));
+    const bool isset = (setting_var & pos) == pos;
+    return isset;
+}
+
 inline bool
 Config::
 isEnabled(const uint32_t setting) const
 {
-    const auto pos = static_cast<uint16_t>(1U << (setting - 1U));
-    const bool isset = (m_bool_settings & pos) == pos;
-    return isset;
+    return isSet(m_bool_settings, setting);
 }
 
 inline uint32_t
@@ -387,15 +426,7 @@ inline void
 Config::
 enable(const Setting setting)
 {
-    m_bool_settings |= (1U << (setting - 1U));
-}
-
-inline void
-Config::
-enable(const initializer_list<const Setting> settings)
-{
-    for (const auto &setting : settings)
-        m_bool_settings |= (1U << (setting - 1U));
+    set(m_bool_settings, setting);
 }
 
 inline void
@@ -403,14 +434,6 @@ Config::
 disable(const Setting setting)
 {
     m_bool_settings &= ~(1U << (setting - 1U));
-}
-
-inline void
-Config::
-disable(const initializer_list<const Setting> settings)
-{
-    for (const auto &setting : settings)
-        m_bool_settings &= ~(1U << (setting - 1U));
 }
 
 inline void

@@ -25,8 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 inline void writeConfigFile()
 {
     const auto boolSettingValue = [](const Config::Setting setting) -> const string {
-        const auto pos = static_cast<uint16_t>(1U << (setting - 1U));
-        return (cfg.boolSettings() & pos) == pos ? CONFIG_BOOL_VALUE_TRUE : CONFIG_BOOL_VALUE_FALSE;
+        return cfg.isEnabled(setting) ? CONFIG_BOOL_VALUE_TRUE : CONFIG_BOOL_VALUE_FALSE;
     };
 
     const auto writeListValues = [](const DataContainer<string> &value_list) -> const string {
@@ -58,12 +57,14 @@ inline void writeConfigFile()
         "input_path                     = \n"
         "output_path                    = \n\n"
 
-        "create_php_include_file        = " + boolSettingValue(Config::GENERAL__CREATE_PHP_INCLUDE_FILE) + "\n\n"
+        "beautify_output                = " + boolSettingValue(Config::GENERAL__BEAUTIFY_OUTPUT) + "\n\n"
 
-        "php_id_array_name              = hspp_id\n"
-        "php_class_array_name           = hspp_cl\n"
-        "php_cprop_array_name           = hspp_cp\n"
-        "php_animation_array_name       = hspp_an\n\n"
+        "create_json_file               = " + boolSettingValue(Config::GENERAL__CREATE_JSON_FILE) + "\n\n"
+
+        "json_id_object_name            = ids\n"
+        "json_class_object_name         = classes\n"
+        "json_cprop_object_name         = cprops\n"
+        "json_animation_object_name     = anims\n\n"
 
         "use_utf8_bom                   = " + boolSettingValue(Config::GENERAL__USE_UTF8_BOM) + "\n"
         "tab_width                      = " + to_string(cfg.tabWidth()) + "\n\n"

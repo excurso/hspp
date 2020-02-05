@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #include "Config.h"
 
-Config::Config() : m_bool_settings(0), m_config_is_read(false)
+Config::Config() : m_bool_settings(0)
 {
     //####################### Default settings #######################
 
@@ -37,7 +37,7 @@ Config::Config() : m_bool_settings(0), m_config_is_read(false)
     };
 
     /// Default minification settings
-    constexpr uint16_t DEFAULT_BOOL_SETTINGS =
+    constexpr uint32_t DEFAULT_BOOL_SETTINGS =
         (1U << (Config::CSS__REMOVE_COMMENTS - 1U)) |
         (1U << (Config::CSS__MINIFY_NUMBERS - 1U)) |
         (1U << (Config::CSS__MINIFY_COLORS - 1U)) |
